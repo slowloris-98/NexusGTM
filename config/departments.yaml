@@ -1,0 +1,14 @@
+# The extension point. Adding a department = a FastMCP server + an entry here.
+# Nothing under /core changes; the dashboard taxonomy is built from this file.
+departments:
+  - id: marketing
+    name: Marketing
+    mcp_endpoint: http://127.0.0.1:8101/mcp
+
+  - id: revops
+    name: RevOps
+    mcp_endpoint: http://127.0.0.1:8102/mcp
+
+  - id: sales
+    name: Sales
+    mcp_endpoint: http://127.0.0.1:8103/mcp

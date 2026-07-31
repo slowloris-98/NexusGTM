@@ -1,0 +1,47 @@
+# Rendered into the planner prompt as text, alongside the live tool schemas from
+# the registry. Never parsed into a graph or state machine -- that would make it
+# the fixed sequence the design rules forbid. Thresholds reach the planner as
+# prompt context, not as branch logic in code.
+
+goal: >
+  Given a raw inbound lead, determine whether it fits our ICP and, if so, get a
+  personalized first-touch draft in front of the right rep.
+
+success_criteria:
+  - lead is enriched with firmographics
+  - a fit score with written reasons exists
+  - qualified leads have an assigned rep and a drafted first touch
+  - disqualified leads terminate early with the reason recorded
+
+patterns:
+  - name: standard_qualification
+    when: a new raw lead with no enrichment
+    guidance: >
+      Enrich first -- scoring without firmographics produces noise. Score against
+      ICP, then route on the score band, then draft outreach for the assigned rep.
+
+  - name: pre_enriched_lead
+    when: the lead already carries firmographics
+    guidance: >
+      Skip enrichment and score directly. Re-enriching costs money and adds nothing.
+
+  - name: early_disqualification
+    when: score is below the disqualify threshold, or negative signals are present
+    guidance: >
+      Terminate after scoring. Do not route and do not draft outreach -- a rep
+      should never receive a lead we have already judged unqualified.
+
+thresholds:
+  route_to_sales: 80
+  nurture: 60
+  disqualify: 40
+
+negative_signals:
+  - free_email_domain
+  - competitor
+  - out_of_region
+  - under_10_employees
+
+guardrails:
+  max_steps: 12
+  budget_usd: 0.50

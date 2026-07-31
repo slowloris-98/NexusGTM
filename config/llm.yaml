@@ -1,0 +1,18 @@
+provider: openai
+default_model: gpt-5.1
+
+# Cost is computed in-process from response.usage against this table.
+# USD per 1M tokens. Stale prices show up as drift against the LangSmith trace.
+prices:
+  gpt-5.1:
+    input: 1.25
+    output: 10.00
+  gpt-5.1-mini:
+    input: 0.25
+    output: 2.00
+  gpt-4.1:
+    input: 2.00
+    output: 8.00
+  gpt-4.1-mini:
+    input: 0.40
+    output: 1.60

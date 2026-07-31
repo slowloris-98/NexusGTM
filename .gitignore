@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+.env
+nexusgtm.db
+nexusgtm.db-wal
+nexusgtm.db-shm
+
+node_modules/
+dashboard/dist/
+dashboard/*.tsbuildinfo
+.vite/
