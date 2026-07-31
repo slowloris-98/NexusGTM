@@ -1,3 +1,3 @@
 1. UI should have graph representation
-2. Integrate clay and hubspot
-3. HLD arch
+2. Integrate clay (lead fetching agent in revops)
+3. Integrate hubspot (crm)

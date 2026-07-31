@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import json
 
+from dotenv import load_dotenv
 from fastmcp import FastMCP
 
 from core.agent import Agent, Spender, register
 from core.llm import strict_schema
+
+# Its own process, so it does not inherit the API's environment: without this the
+# OpenAI client finds no key and every tool call comes back status="error".
+load_dotenv()
 
 mcp = FastMCP("marketing")
 
