@@ -5,17 +5,9 @@ department boundaries. A goal-directed planner picks the next agent at runtime f
 config-driven registry, and a control plane gives leadership visibility into every
 orchestration, its result, and its LLM cost per agent.
 
-New departments plug in without touching `/core`.
-
-```
-Marketing            RevOps                     Sales
-  enrichment    →    scoring → routing     →    outreach_draft
-```
-
-The path above is the *common* one, not a hardcoded sequence. A pre-enriched lead skips
-enrichment; a disqualified lead terminates after scoring and never reaches Sales.
-
 ## Architecture
+
+![System Architecture](docs/sys_arch.png)
 
 | Piece | What it does |
 |---|---|
@@ -27,6 +19,18 @@ enrichment; a disqualified lead terminates after scoring and never reaches Sales
 | `core/orchestrator.py` | LangGraph graph: plan → invoke → guardrails → plan. |
 | `store/` | SQLite (WAL). Orchestrations, runs, cost events, decisions. Also the knowledge base. |
 | `api/` + `dashboard/` | FastAPI JSON API, React control plane. |
+
+New departments plug in without touching `/core`.
+
+Example path:
+
+```
+Marketing            RevOps                     Sales
+  enrichment    →    scoring → routing     →    outreach_draft
+```
+
+The path above is the *common* one, not a hardcoded sequence. A pre-enriched lead skips
+enrichment; a disqualified lead terminates after scoring and never reaches Sales.
 
 ### Cost is computed in-process, not read back from a tracing service
 
@@ -85,6 +89,10 @@ cd dashboard && npm run dev                   # :5173  (Node — no venv needed)
 
 Or skip activation and call the interpreter directly:
 `.venv/Scripts/python.exe -m departments.marketing.server`.
+
+> Config is cached per process. Editing `config/playbook.yaml` — the ICP, the score
+> bands, the negative signals — means restarting the department servers too, not just
+> the API, since the revops agents render those values into their prompts.
 
 Then seed some runs and open <http://localhost:5173>:
 
