@@ -7,9 +7,38 @@ import json
 from fastmcp import FastMCP
 
 from core.agent import Agent, Spender, register
+from core.config import playbook
 from core.llm import strict_schema
 
 mcp = FastMCP("revops")
+
+
+# Policy -- the ICP, the score bands, the signal vocabulary -- is rendered in from
+# the playbook rather than written into these prompts, so it cannot drift from what
+# the planner is told. Queue and segment names stay here: they are the output
+# contract, declared in the schemas below, not tunable policy.
+#
+# Missing keys raise rather than falling back to a literal; a default would be the
+# duplicated constant this indirection exists to remove, and `Agent.run` turns the
+# raise into status=failed, which is the right answer for misconfigured policy.
+
+
+def render_icp() -> str:
+    return playbook()["icp"].strip()
+
+
+def render_negative_signals() -> str:
+    return ", ".join(playbook()["negative_signals"])
+
+
+def render_score_bands() -> str:
+    t = playbook()["thresholds"]
+    high, mid, low = t["route_to_sales"], t["nurture"], t["disqualify"]
+    return (
+        f"{high}+ to ae_direct with a 4 hour SLA, "
+        f"{mid}-{high - 1} to sdr_nurture with 24 hours, "
+        f"below {low} to disqualified"
+    )
 
 
 class ScoringAgent(Agent):
@@ -53,12 +82,11 @@ class ScoringAgent(Agent):
                 {"lead": payload.get("lead"), "firmographics": firmographics}, default=str
             ),
             instructions=(
-                "You are a RevOps scoring engine. Score ICP fit 0-100. Our ICP is B2B "
-                "software and services companies, 50-5000 employees, North America or "
-                "Western Europe, with an identifiable buying signal. Deduct heavily for "
-                "negative signals: free_email_domain, competitor, out_of_region, "
-                "under_10_employees. List each negative signal you find by that exact "
-                "name. Give concrete reasons tied to the firmographics, not generic praise."
+                "You are a RevOps scoring engine. Score ICP fit 0-100. Our ICP is "
+                f"{render_icp()} Deduct heavily for negative signals: "
+                f"{render_negative_signals()}. List each negative signal you find by "
+                "that exact name. Give concrete reasons tied to the firmographics, not "
+                "generic praise."
             ),
             schema=self.output_schema,
         )
@@ -109,8 +137,7 @@ class RoutingAgent(Agent):
             instructions=(
                 "You are a RevOps routing engine. Segment by employee count: "
                 "enterprise 1000+, mid_market 100-999, smb under 100. Route by score: "
-                "80+ to ae_direct with a 4 hour SLA, 60-79 to sdr_nurture with 24 hours, "
-                "below 40 to disqualified. Assign a plausible rep name for the segment. "
+                f"{render_score_bands()}. Assign a plausible rep name for the segment. "
                 "State the rationale in one sentence."
             ),
             schema=self.output_schema,

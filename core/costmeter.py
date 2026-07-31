@@ -2,7 +2,10 @@
 
 Rollups:
     runs.cost_usd                 = sum of that run's cost_events
-    orchestrations.total_cost_usd = sum of its runs.cost_usd
+    orchestrations.total_cost_usd = sum of its cost_events
+
+The orchestration total sums cost_events rather than runs.cost_usd because the
+planner's spend belongs to no run; rolling up the runs would drop it.
 
 Agents execute in separate department processes, so they cannot write here
 directly -- they return `cost_events[]` in the MCP tool result and the
