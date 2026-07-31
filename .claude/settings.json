@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(uv --version)",
+      "Bash(npm --version)",
+      "Bash(uv venv *)",
+      "Bash(uv pip *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(.venv/Scripts/python.exe -m pip install -e \".[dev]\" --dry-run)",
+      "Bash(uv sync *)"
+    ]
+  }
+}

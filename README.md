@@ -53,7 +53,9 @@ orchestration.
 ```bash
 uv venv --python 3.12
 uv pip install -e .
-uv pip install pytest pytest-asyncio          # dev
+uv pip install --group dev                    # pytest et al
+
+# note: `.[dev]` does not work -- dev is a PEP 735 dependency-group, not an extra
 
 cp .env.example .env                          # add your OPENAI_API_KEY
 
@@ -65,14 +67,24 @@ cd dashboard && npm install && cd ..
 Five processes, each in its own terminal. The department servers must be up before the
 API, or the registry starts with a partial action space (it will name what is missing).
 
+One venv serves all four Python processes — activate it in each terminal:
+
+```powershell
+.venv\Scripts\Activate.ps1        # PowerShell
+source .venv/Scripts/activate     # Git Bash
+```
+
 ```bash
 python -m departments.marketing.server        # :8101
 python -m departments.revops.server           # :8102
 python -m departments.sales.server            # :8103
 
 python -m uvicorn api.main:app --port 8000    # :8000
-cd dashboard && npm run dev                   # :5173
+cd dashboard && npm run dev                   # :5173  (Node — no venv needed)
 ```
+
+Or skip activation and call the interpreter directly:
+`.venv/Scripts/python.exe -m departments.marketing.server`.
 
 Then seed some runs and open <http://localhost:5173>:
 
