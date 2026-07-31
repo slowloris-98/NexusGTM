@@ -1,7 +1,11 @@
-# Rendered into the planner prompt as text, alongside the live tool schemas from
-# the registry. Never parsed into a graph or state machine -- that would make it
-# the fixed sequence the design rules forbid. Thresholds reach the planner as
-# prompt context, not as branch logic in code.
+# The shared GTM policy file. The planner renders goal/patterns/thresholds into
+# its prompt, the orchestrator reads guardrails, and the revops agents render icp,
+# thresholds, and negative_signals into their own prompts -- so a policy number
+# lives here once, not once per prompt.
+#
+# Never parsed into a graph or state machine -- that would make it the fixed
+# sequence the design rules forbid. Thresholds reach the models as prompt context,
+# not as branch logic in code.
 
 goal: >
   Given a raw inbound lead, determine whether it fits our ICP and, if so, get a
@@ -12,6 +16,11 @@ success_criteria:
   - a fit score with written reasons exists
   - qualified leads have an assigned rep and a drafted first touch
   - disqualified leads terminate early with the reason recorded
+
+# Prose, because it is dropped into the scoring prompt verbatim.
+icp: >
+  B2B software and services companies, 50-5000 employees, North America or
+  Western Europe, with an identifiable buying signal.
 
 patterns:
   - name: standard_qualification

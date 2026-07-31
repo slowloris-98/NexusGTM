@@ -89,3 +89,60 @@ flowchart TD
 The path is chosen per run, not fixed. An invalid payload is a re-plan rather than a
 crash, because the planner's action space is every registered agent — it will sometimes
 pick one the blackboard cannot yet satisfy.
+
+## At a glance
+
+```mermaid
+---
+config:
+  look: handDrawn
+  theme: neutral
+---
+flowchart TD
+    DB[("db")]
+    LEADS["Leads"]
+    CRM["CRM"]
+    ORCH["Orchestrator<br/>plan ⇄ invoke"]
+    CFG["departments.yaml"]
+
+    LEADS --> ORCH
+    DB <--> ORCH
+    ORCH <--> CRM
+    CFG -.->|"registry: discover agents"| ORCH
+
+    ORCH <-->|"MCP · output + cost_events"| M["Department:<br/>Marketing<br/>(MCP)"]
+    ORCH <--> S["Department:<br/>Sales<br/>(MCP)"]
+    ORCH <--> R["Department:<br/>RevOps<br/>(MCP)"]
+
+    OAI(["OpenAI"])
+    ORCH --> OAI
+    M --> OAI
+    S --> OAI
+    R --> OAI
+    DB --> API["API + UI"]
+```
+
+CRM is a future addition — nothing writes back to it yet.
+
+## The graph as built
+
+The run loop above is the intent; this is the actual LangGraph — two nodes, both
+outbound edges conditional.
+
+```mermaid
+---
+config:
+  look: handDrawn
+  theme: neutral
+---
+flowchart TD
+    START(["raw lead"]) --> PLAN["plan<br/>choose next agent<br/>log decision + rationale"]
+    PLAN -->|"unknown agent name"| PLAN
+    PLAN -->|"agent chosen"| INV["invoke<br/>validate · MCP call<br/>record run + cost_events"]
+    INV -->|"running"| PLAN
+    PLAN --> DONE(["completed / no_agent"])
+    INV --> HALT(["halted_budget<br/>halted_steps<br/>halted_loop<br/>failed"])
+```
+
+Guardrails are not a node. `_guardrail_status` runs inside `invoke`, because a status
+assigned in an edge function would not survive into the graph's final state.
