@@ -1,40 +1,68 @@
+/* The Instrument Panel, built as a console.
+   Token roles and named rules: DESIGN.md at the repo root.
+
+   Three documented defects are fixed here rather than reproduced:
+   - status colors had no dark values and rendered light-on-dark;
+   - series 2 and 3 got *darker* in dark mode instead of lighter;
+   - nothing in the stylesheet styled :focus-visible.
+   Several hues also moved a step in lightness so text clears 4.5:1 on its own
+   ground. Hue, role, and name are unchanged; only luminance moved. */
+
 :root {
   color-scheme: light;
-  --surface-1: #fcfcfb;
+
   --page: #f9f9f7;
+  --surface-1: #fcfcfb;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --muted: #898781;
+  --muted: #6e6c66;
   --grid: #e1e0d9;
   --baseline: #c3c2b7;
   --border: rgba(11, 11, 11, 0.1);
 
-  --series-1: #2a78d6;
+  --series-1: #2470cc;
   --series-2: #eb6834;
-  --series-3: #1baf7a;
+  --series-3: #178f64;
 
-  --good: #0ca30c;
-  --warning: #fab219;
-  --serious: #ec835a;
+  --good: #0a7c0a;
+  --warning: #96650b;
+  --serious: #b4471a;
   --critical: #d03b3b;
 
+  --ring: var(--series-1);
+
+  --rail-width: 340px;
+  --bar-height: 46px;
+
+  --ease: cubic-bezier(0.2, 0, 0.15, 1);
+  --fast: 140ms;
+  --slow: 220ms;
+
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-synthesis-weight: none;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
-    --surface-1: #1a1a19;
+
     --page: #0d0d0d;
+    --surface-1: #1a1a19;
     --text-primary: #ffffff;
     --text-secondary: #c3c2b7;
     --muted: #898781;
     --grid: #2c2c2a;
     --baseline: #383835;
     --border: rgba(255, 255, 255, 0.1);
+
     --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
+    --series-2: #f2794a;
+    --series-3: #2fcb92;
+
+    --good: #17bd17;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #ef6161;
   }
 }
 
@@ -42,173 +70,433 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   background: var(--page);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
 }
 
-.app {
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 28px 24px 64px;
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
-header.masthead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 4px;
+:where(button, a, input, select, [tabindex]):focus:not(:focus-visible) {
+  outline: none;
 }
 
-h1 {
-  font-size: 20px;
-  font-weight: 650;
-  margin: 0;
-  letter-spacing: -0.01em;
-}
-
-.subtitle {
-  color: var(--text-secondary);
-  font-size: 13px;
-  margin: 2px 0 20px;
-}
-
-nav.tabs {
-  display: flex;
-  gap: 2px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
-nav.tabs button {
-  appearance: none;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 13px;
-  padding: 9px 14px;
-  cursor: pointer;
-  margin-bottom: -1px;
-}
-
-nav.tabs button:hover {
-  color: var(--text-primary);
-}
-
-nav.tabs button[aria-current="true"] {
-  color: var(--text-primary);
-  font-weight: 600;
-  border-bottom-color: var(--series-1);
-}
-
-.card {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 18px 20px;
-  margin-bottom: 18px;
-}
-
-.card > h2 {
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.045em;
-  color: var(--text-secondary);
-  margin: 0 0 4px;
-}
-
-.card > .hint {
-  font-size: 12px;
-  color: var(--muted);
-  margin: 0 0 16px;
-}
-
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
-  margin-bottom: 18px;
-}
-
-.tile {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px 18px;
-}
-
-.tile .label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
-.tile .value {
-  font-size: 27px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-}
-
-.tile .note {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 4px;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-th {
-  text-align: left;
-  font-weight: 600;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  padding: 8px 12px 8px 0;
-  border-bottom: 1px solid var(--border);
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
-td {
-  padding: 10px 12px 10px 0;
-  border-bottom: 1px solid var(--grid);
-  vertical-align: top;
+/* ---------------------------------------------------------------- chassis */
+
+.console {
+  height: 100%;
+  display: grid;
+  grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  grid-template-rows: var(--bar-height) minmax(0, 1fr);
+  grid-template-areas:
+    "bar bar"
+    "rail pane";
 }
 
-td.num,
-th.num {
-  text-align: right;
+.systembar {
+  grid-area: bar;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--page);
+}
+
+.systembar .wordmark {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.systembar .spacer {
+  flex: 1;
+}
+
+.systembar .health {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.systembar .health .text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.systembar .health.degraded {
+  color: var(--serious);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------- rail */
+
+.rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--page);
+}
+
+.rail-search {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.rail-search input {
+  font: inherit;
+  font-size: 13px;
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.rail-search input::placeholder {
+  color: var(--muted);
+}
+
+.rail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.rail-section {
+  padding: 14px 0 4px;
+}
+
+.rail-section + .rail-section {
+  border-top: 1px solid var(--grid);
+}
+
+.rail-section > h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0 0 6px;
+  padding: 0 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rail-section > h2 .count {
   font-variant-numeric: tabular-nums;
-  padding-right: 0;
+  font-weight: 400;
 }
 
-tr.clickable {
+.rail-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  background: none;
+  border: none;
+  border-radius: 0;
+  font: inherit;
+  color: var(--text-secondary);
+  padding: 8px 14px;
   cursor: pointer;
+  transition: background var(--fast) var(--ease);
 }
 
-tr.clickable:hover td {
-  background: color-mix(in srgb, var(--series-1) 6%, transparent);
+.rail-row:hover {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
 }
 
-.scroll-x {
-  overflow-x: auto;
+.rail-row[aria-current="true"] {
+  background: color-mix(in srgb, var(--series-1) 12%, transparent);
+  color: var(--text-primary);
 }
 
-.badge {
+.rail-row:focus-visible {
+  outline-offset: -2px;
+  border-radius: 0;
+}
+
+.rail-row .headline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.rail-row .who {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-row[aria-current="true"] .who {
+  font-weight: 600;
+}
+
+.rail-row .cost {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  flex: none;
+}
+
+.rail-row .sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.rail-row .sub .state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-row .sub .when {
+  margin-left: auto;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.rail-row.pinned {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 9px 14px;
+}
+
+.rail-row.pinned[aria-current="true"] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.rail-row.pinned .trailing {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.rail-empty {
+  padding: 10px 14px 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------- pane */
+
+.pane {
+  grid-area: pane;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--surface-1);
+}
+
+/* Uncapped on purpose. A fixed reading measure left the right half of a wide monitor
+   empty, so the pane runs the full width of its column and the panes pair their blocks
+   into two bands (see .spread) rather than stretching one column of prose across it. */
+.pane-inner {
+  max-width: none;
+  padding: 26px 28px 72px;
+}
+
+.pane-back {
+  display: none;
+}
+
+.pane-head {
+  margin-bottom: 26px;
+}
+
+.pane-head h1 {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pane-head h1 .ref {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.pane-head .meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+
+/* --------------------------------------------------------------- sections */
+
+.block {
+  padding-top: 22px;
+  margin-top: 22px;
+  border-top: 1px solid var(--grid);
+}
+
+/* The block that opens a pane carries no rule: the pane head is its own separation.
+   Said against `.pane-head` rather than as `:first-of-type`, which counts siblings and
+   so names the wrong block the moment a .spread nests some of them -- the last block in
+   the pane would strip its rule while the first kept one. */
+.pane-head + .block,
+.pane-head + .spread > .block:first-child {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
+}
+
+.block > h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+/* Two blocks the pane wants side by side once there is room for two readable columns.
+   Narrow, this is a pass-through: a one-column grid changes nothing, so every block
+   keeps its own Grid Rule and its own 22px of clearance. */
+.spread {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Wide, the pair becomes one band. The band takes over the horizontal rule and the
+   blocks inside it give theirs up, so both columns start on the same line; the divider
+   between them is the same Grid Rule stood on end. */
+@media (min-width: 1240px) {
+  .spread {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 36px;
+    align-items: start;
+    padding-top: 22px;
+    margin-top: 22px;
+    border-top: 1px solid var(--grid);
+  }
+
+  .pane-head + .spread {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+  }
+
+  .spread > .block {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+  }
+
+  .spread > .block + .block {
+    padding-left: 36px;
+    border-left: 1px solid var(--grid);
+  }
+}
+
+/* The briefing's answer: a sentence, with its load-bearing figure at display size. */
+.answer {
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: 0;
+  max-width: 46ch;
+  text-wrap: balance;
+}
+
+.answer .fig {
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.answer .quiet {
+  color: var(--text-secondary);
+}
+
+.answer.alert {
+  color: var(--serious);
+  font-weight: 600;
+}
+
+.support {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.support .sep::before {
+  content: "·";
+  margin-right: 10px;
+  color: var(--baseline);
+}
+
+/* ------------------------------------------------------------ status chip */
+
+.chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -218,33 +506,126 @@ tr.clickable:hover td {
   border-radius: 999px;
   border: 1px solid var(--border);
   white-space: nowrap;
+  vertical-align: middle;
 }
 
-.badge::before {
+.chip::before {
   content: "";
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: currentColor;
+  flex: none;
 }
 
-.badge.good {
+.chip.good {
   color: var(--good);
 }
-.badge.warn {
+.chip.attention {
   color: var(--serious);
 }
-.badge.bad {
+.chip.fault {
   color: var(--critical);
 }
-.badge.neutral {
+.chip.neutral {
+  color: var(--text-secondary);
+}
+.chip.live {
+  color: var(--series-1);
+}
+
+.chip.live::before {
+  animation: breathe 2.4s var(--ease) infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Bare dot, for the rail where the word already appears beside it. */
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.dot.good {
+  color: var(--good);
+}
+.dot.attention {
+  color: var(--serious);
+}
+.dot.fault {
+  color: var(--critical);
+}
+.dot.neutral {
+  color: var(--baseline);
+}
+.dot.live {
+  color: var(--series-1);
+  animation: breathe 2.4s var(--ease) infinite;
+}
+
+/* ------------------------------------------------------------ attention list */
+
+.exceptions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.exceptions li + li {
+  border-top: 1px solid var(--grid);
+}
+
+.exception {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  padding: 11px 8px 11px 0;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+
+.exception:hover {
+  background: color-mix(in srgb, var(--series-1) 6%, transparent);
+}
+
+.exception .who {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  flex: none;
+}
+
+.exception .what {
+  flex: 1;
+  min-width: 0;
   color: var(--text-secondary);
 }
 
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+.exception .when {
   font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  flex: none;
 }
+
+/* ------------------------------------------------------------------ trail */
 
 .trail {
   list-style: none;
@@ -275,7 +656,7 @@ tr.clickable:hover td {
   border: 2px solid var(--surface-1);
 }
 
-.trail li.skipped::before {
+.trail li.terminal::before {
   background: var(--serious);
 }
 
@@ -284,10 +665,16 @@ tr.clickable:hover td {
   font-size: 13px;
 }
 
+.trail .step-agent .dept {
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .trail .step-rationale {
   color: var(--text-secondary);
   font-size: 13px;
   margin-top: 2px;
+  max-width: 68ch;
 }
 
 .trail .step-candidates {
@@ -296,53 +683,105 @@ tr.clickable:hover td {
   margin-top: 4px;
 }
 
+/* ------------------------------------------------------------------ table */
+
+.scroll-x {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 8px 14px 8px 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+td {
+  padding: 10px 14px 10px 0;
+  border-bottom: 1px solid var(--grid);
+  vertical-align: top;
+}
+
+td:last-child,
+th:last-child {
+  padding-right: 0;
+}
+
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------------- misc */
+
 pre.payload {
   background: var(--page);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 12px;
-  overflow-x: auto;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  margin: 6px 0 0;
-  max-height: 300px;
+  line-height: 1.5;
+  margin: 0;
+  max-height: 340px;
 }
 
-input[type="search"],
-select {
+.linkish {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
   font: inherit;
-  font-size: 13px;
-  padding: 7px 10px;
-  border-radius: 7px;
-  border: 1px solid var(--border);
-  background: var(--surface-1);
-  color: var(--text-primary);
-  min-width: 240px;
+  font-size: 12px;
+  color: var(--series-1);
+  cursor: pointer;
 }
 
-.controls {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+.linkish:hover {
+  text-decoration: underline;
 }
 
 .empty {
   color: var(--muted);
   font-size: 13px;
-  padding: 20px 0;
+  margin: 0;
 }
 
-.back {
-  appearance: none;
-  background: none;
-  border: none;
-  color: var(--series-1);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  padding: 0;
-  margin-bottom: 12px;
+.gloss {
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+  max-width: 62ch;
+}
+
+/* What a run was about, above the sentence about how it ended. The subject is primary
+   text because it is the one thing on the screen the reader recognises; the work done to
+   it trails behind at secondary weight, as context rather than a second claim. */
+.subject {
+  color: var(--text-primary);
+  margin: 10px 0 0;
+  max-width: 74ch;
+}
+
+.subject .work {
+  color: var(--text-secondary);
 }
 
 .chart-tooltip {
@@ -363,41 +802,590 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-.banner {
-  background: color-mix(in srgb, var(--serious) 12%, var(--surface-1));
-  border: 1px solid color-mix(in srgb, var(--serious) 35%, transparent);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 13px;
-  margin-bottom: 18px;
+.skeleton {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--grid) 0%,
+    color-mix(in srgb, var(--grid) 45%, transparent) 50%,
+    var(--grid) 100%
+  );
+  background-size: 200% 100%;
+  animation: sweep 1.4s linear infinite;
 }
 
-.dept-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+@keyframes sweep {
+  to {
+    background-position: -200% 0;
+  }
 }
 
-.dept {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
-}
-
-.dept .name {
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.dept .endpoint {
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.dept ul {
+.fault-note {
+  color: var(--critical);
   margin: 0;
-  padding-left: 16px;
+}
+
+/* -------------------------------------------------------------------- map
+
+   The one scoped exception to this system: a committed dark world with a colour
+   per department, pinned by the brief. See DESIGN.md > Scoped Exceptions. The
+   exception stops at .map-stage, which has two hosts -- the Map pane and the graph
+   embedded in a lead's detail (.map-stage.is-run, which differs in sizing alone).
+   A second host does not widen what the exception permits: the same tokens and the
+   same rules apply inside both, everything around either one is ordinary console
+   chrome, and none of the four reserved status hues appear inside either at all.
+
+   Every static colour is a token here. The only value the component sets is each
+   department's --hue, which is data; the colour recipe stays in this file. */
+
+.pane-inner.is-map {
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.map-stage {
+  --map-ground-lift: oklch(19% 0.02 265);
+  --map-ground: oklch(15% 0.014 265);
+  --map-ground-deep: oklch(10% 0.012 265);
+  --map-core: oklch(96% 0.02 250);
+  --map-core-ring: oklch(88% 0.04 250);
+  --map-label: oklch(93% 0.008 250);
+  --map-label-dim: oklch(74% 0.008 250);
+  --map-label-agent: oklch(85% 0.008 250);
+  --map-dormant: oklch(52% 0.008 265);
+  --map-dormant-text: oklch(66% 0.008 265);
+  --map-star: oklch(99% 0 0);
+  --map-star-alt: oklch(88% 0.03 250);
+
+  /* No --map-hue-* tokens here on purpose. --hue is set per element by hueVar(), and a
+     custom property's var() is substituted on the element that DECLARES it -- so a recipe
+     written here would resolve against a --hue this element does not have, compute to
+     guaranteed-invalid, and paint every fill black. Hue-derived colours are written
+     directly at their point of use instead. */
+
+  position: relative;
+  flex: 1;
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 6px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 45%, oklch(19% 0.02 265) 0%, var(--map-ground) 55%, var(--map-ground-deep) 100%);
+}
+
+/* Square and centred, so the HTML label layer's percentages line up exactly with the
+   SVG's user-unit coordinates -- preserveAspectRatio has nothing left to letterbox. */
+.map-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  aspect-ratio: 1;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+}
+
+.map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* The ground layer, spanning the whole stage rather than the square canvas. Sits before
+   .map-canvas in the DOM so the constellation paints over it, and takes no pointer events
+   so it can never swallow a node or edge hover. */
+.map-starfield {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* Static by choice. The reference is a still field, and a continuously rotating
+   260-circle group repaints forever for no state. The live pulse carries motion. */
+.map-stars circle {
+  fill: var(--map-star);
+}
+
+.map-stars-b circle {
+  fill: var(--map-star-alt);
+}
+
+/* Three tiers of edge, all straight, weighted so the structure leads and the flow recedes:
+   trunk (orchestrator -> department) > branch (department -> agent) > flow (agent -> agent).
+   The tree is what gives the constellation its shape; the handoffs are what happened
+   inside it. */
+.map-structural line {
+  stroke: oklch(70% 0.12 var(--hue));
+}
+
+.map-structural line.trunk {
+  stroke-width: 2.5;
+  opacity: 0.55;
+}
+
+.map-structural line.branch {
+  stroke-width: 1.75;
+  opacity: 0.42;
+}
+
+.map-structural line.down {
+  stroke-dasharray: 3 6;
+  opacity: 0.18;
+}
+
+.map-flow path {
+  fill: none;
+  stroke: oklch(78% 0.15 var(--hue));
+  stroke-width: calc(0.75px + var(--w) * 1px);
+  stroke-linecap: round;
+  /* --fade runs 1 -> 0 across the linger window once the last contributing run finished,
+     driven from the component because a 4s poll cannot carry a 6s fade. */
+  opacity: calc((0.2 + var(--w) * 0.14) * var(--fade, 1));
+  transition: opacity var(--fast) var(--ease);
+}
+
+/* Below a normal flow edge on purpose: a handoff the schema refused should never read as
+   more substantial than one that went through. */
+/* Every override multiplies --fade back in. A flat opacity here would pin the edge and
+   it would never fade out at all. */
+.map-flow path.rejected {
+  stroke-dasharray: 5 7;
+  opacity: calc(0.16 * var(--fade, 1));
+}
+
+/* Live and hovered still punch hard -- the resting field is quiet so these can carry. */
+.map-flow path.live {
+  opacity: calc(0.95 * var(--fade, 1));
+}
+
+.map-flow path.muted {
+  opacity: calc(0.06 * var(--fade, 1));
+}
+
+.map-flow path.hot {
+  opacity: var(--fade, 1);
+  stroke-width: calc(2px + var(--w) * 1px);
+}
+
+/* A dot per handoff, running sender to receiver.
+
+   This one animates at rest and so does not report state -- a recorded exception, see
+   DESIGN.md > Scoped Exceptions. Duration and delay arrive per edge from the component:
+   duration scales with the edge's length so every dot moves at the same speed.
+
+   Straight edges mean a plain translate does the job; offset-path would buy path-following
+   we do not need and is far younger than CSS transforms on SVG. transform-box pins the
+   translate to viewBox units, and translate is origin-independent so transform-origin
+   needs no thought. */
+.map-flow-dots circle {
+  fill: oklch(90% 0.16 var(--hue));
+  transform-box: view-box;
+  animation-name: map-travel;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.map-flow-dots circle.muted {
+  opacity: 0.08;
+}
+
+@keyframes map-travel {
+  from {
+    transform: translate(var(--x1), var(--y1));
+    opacity: 0;
+  }
+  12%,
+  88% {
+    opacity: 0.9;
+  }
+  to {
+    transform: translate(var(--x2), var(--y2));
+    opacity: 0;
+  }
+}
+
+/* Hit targets only. A chord's visible stroke is 1-3.4px, which no pointer can reliably
+   find, so hover rides on a transparent 16px stroke instead. */
+.map-flow-hit path {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.map-core .halo {
+  fill: url(#core-halo);
+}
+
+.map-core .core {
+  fill: var(--map-core);
+}
+
+.map-core .ring {
+  fill: none;
+  stroke: var(--map-core-ring);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.map-core.live .core {
+  animation: map-pulse-core 2.2s var(--ease) infinite;
+}
+
+/* Keyed by class, not by the gradient's id: two stages exist, each needs its own
+   <radialGradient> because ids are unique per document, and an id selector could only ever
+   have dressed one of them. */
+.map-halo .halo-in {
+  stop-color: oklch(92% 0.03 250);
+  stop-opacity: 0.8;
+}
+.map-halo .halo-mid {
+  stop-color: oklch(80% 0.06 250);
+  stop-opacity: 0.2;
+}
+.map-halo .halo-out {
+  stop-color: oklch(70% 0.08 250);
+  stop-opacity: 0;
+}
+
+.map-hub,
+.map-node {
+  transition: opacity var(--fast) var(--ease);
+}
+
+.map-hub.dimmed,
+.map-node.dimmed {
+  opacity: 0.2;
+}
+
+.map-hub .hub {
+  fill: oklch(72% 0.16 var(--hue));
+}
+
+.map-hub .ring {
+  fill: none;
+  stroke: oklch(70% 0.14 var(--hue));
+  stroke-width: 1;
+  opacity: 0.75;
+}
+
+.map-hub.down .hub {
+  fill: var(--map-dormant);
+}
+
+.map-hub.down .ring {
+  opacity: 0.28;
+}
+
+.map-node .node {
+  fill: oklch(74% 0.15 var(--hue));
+  opacity: 0.8;
+}
+
+/* The same hue as at rest, lifted in lightness. Bright is the live signal; the hue is
+   the department's identity and must survive it. */
+.map-node.live .node {
+  fill: oklch(86% 0.15 var(--hue));
+  opacity: 1;
+}
+
+.map-node.historical .node {
+  fill: var(--map-dormant);
+  opacity: 0.7;
+}
+
+.map-node .pulse {
+  fill: oklch(70% 0.13 var(--hue) / 0.32);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: map-pulse 2.2s var(--ease) infinite;
+}
+
+@keyframes map-pulse {
+  0%,
+  100% {
+    transform: scale(0.55);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 0.1;
+  }
+}
+
+@keyframes map-pulse-core {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Labels are HTML over the SVG, so they stay on the documented type ramp at every
+   pane width instead of shrinking with the viewBox. */
+.map-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.map-labels > div {
+  position: absolute;
+  white-space: nowrap;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.map-dept-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--map-label);
+}
+
+.map-dept-label .sub {
+  display: block;
+  margin-top: 3px;
   font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--map-dormant-text);
+}
+
+.map-dept-label.down {
+  color: var(--map-dormant-text);
+}
+
+/* Hidden until its node is hovered. Seven nodes do not need four permanent captions, and
+   the names are one pointer-move away. Rendered-but-transparent rather than unmounted, so
+   the reveal can fade and nothing reflows. */
+.map-agent-label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--map-label-agent);
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.map-agent-label.shown {
+  opacity: 1;
+}
+
+.map-agent-label.live {
+  color: oklch(90% 0.09 var(--hue, 250));
+}
+
+.map-agent-label.historical {
+  color: var(--map-dormant-text);
+}
+
+/* Department labels only, and scoped on purpose. As `.map-labels > div.dimmed` this was
+   (0,2,1) and beat .map-agent-label's (0,1,0) `opacity: 0` -- so dimming an agent label
+   made it *visible* at 20%, and hovering a hub revealed every other department's agents
+   while hiding its own. Agent labels are governed solely by .map-agent-label[.shown]. */
+.map-dept-label.dimmed {
+  opacity: 0.2;
+}
+
+/* Locked height, deliberately.
+
+   .map-canvas above is `flex: 1` with `aspect-ratio: 1`, so the map is sized by whatever
+   height is left over. If this strip grew with its text the constellation would resize on
+   every hover -- and it would, because the registry descriptions it prints run to 189
+   characters against a ~78-character resting line. So: a fixed box, one nowrap status row,
+   and a detail row clamped to two lines. Nothing said here can move the map.
+
+   78px = 10px padding x2 + one 18px status line + 4px gap + two 18px detail lines. */
+.map-readout {
+  flex: none;
+  height: 78px;
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid oklch(100% 0 0 / 0.08);
+  background: oklch(100% 0 0 / 0.02);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 4px;
+  align-content: start;
+  overflow: hidden;
+}
+
+.map-readout-status {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--map-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-readout-detail {
+  margin: 0;
+  font-size: 12px;
+  color: var(--map-label-dim);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Below the stage: ordinary console chrome, on the console's own surface. */
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.map-chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
   color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--fast) var(--ease);
+}
+
+.map-chip:hover {
+  color: var(--text-primary);
+}
+
+.map-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: oklch(62% 0.16 var(--hue));
+  flex: none;
+}
+
+.map-chip.down {
+  color: var(--muted);
+}
+
+.map-chip.down .map-chip-dot {
+  background: var(--baseline);
+}
+
+.map-chip-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* --------------------------------------------------------- the run graph
+
+   The same dark world, embedded per run at the bottom of a lead's detail. Same tokens, same
+   classes, same geometry -- only the sizing differs, and it has to: the map's stage takes the
+   leftover height of a full-height flex pane, while this one sits in a normal scrolling
+   document and has to state its own box. */
+
+.map-stage.is-run {
+  /* `flex: 1` is inert outside a flex column, and `min-height: 460px` would be a floor with
+     no ceiling. Square and capped instead: the constellation is square, so a stage that is
+     not square is dead ground either side of it -- and below the cap the ratio takes over
+     and the stage shrinks with its column, which is what both the spread's half-width
+     column and the narrow-screen slide-over need without a breakpoint of their own. */
+  flex: none;
+  min-height: 0;
+  width: min(100%, 720px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+}
+
+/* The halo's paint server is set here rather than on the element, because `fill` in CSS
+   beats a presentation attribute -- an attribute on the circle would never take. Each stage
+   owns a gradient under its own id, since only one pane is mounted at a time and a stage
+   pointing at the other one's would resolve to nothing and lose its halo entirely. */
+.map-stage.is-run .map-core .halo {
+  fill: url(#run-core-halo);
+}
+
+/* One travelling head walking the run's hops in order, not a dot per edge. It is remounted
+   at each hop -- the React key restarts the keyframe -- so it must not loop on its own. */
+.map-flow-dots circle.relay {
+  animation-iteration-count: 1;
+}
+
+/* ------------------------------------------------------------- responsive */
+
+@media (max-width: 900px) {
+  .console {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "bar"
+      "rail";
+  }
+
+  .pane {
+    position: fixed;
+    inset: var(--bar-height) 0 0;
+    z-index: 2;
+    transform: translateX(100%);
+    visibility: hidden;
+    transition:
+      transform var(--slow) var(--ease),
+      visibility var(--slow) var(--ease);
+  }
+
+  .console.detail-open .pane {
+    transform: none;
+    visibility: visible;
+  }
+
+  .pane-inner {
+    padding: 18px 18px 64px;
+  }
+
+  .pane-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 0;
+    margin-bottom: 16px;
+    font: inherit;
+    font-size: 13px;
+    color: var(--series-1);
+    cursor: pointer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Collapsing the duration would not remove these -- it would park every dot at its
+     sender end as a permanent speck on each edge. They have to go entirely. */
+  .map-flow-dots {
+    display: none;
+  }
 }
