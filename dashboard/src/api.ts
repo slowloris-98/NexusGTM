@@ -87,8 +87,40 @@ export const api = {
   search: (q: string) => get<SearchHit[]>(`/search?q=${encodeURIComponent(q)}`),
 };
 
+/**
+ * Spend here is sub-cent. Everything below a dollar carries four places so a column
+ * of costs is comparable at a glance -- mixing $0.01 and $0.0056 in one column defeats
+ * the point of tabular figures. Totals above a dollar drop back to two.
+ */
 export const usd = (n: number | null | undefined) =>
-  n == null ? "—" : `$${n < 0.01 && n > 0 ? n.toFixed(4) : n.toFixed(2)}`;
+  n == null ? "—" : `$${n !== 0 && Math.abs(n) < 1 ? n.toFixed(4) : n.toFixed(2)}`;
 
 export const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "—";
+
+/** Clock time for today, date for anything older. A daily glance reads "14:02". */
+export const shortWhen = (iso: string | null) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const today = new Date().toDateString() === d.toDateString();
+  return today
+    ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
+
+/** How long ago, for things still in flight. */
+export const elapsed = (iso: string | null) => {
+  if (!iso) return "—";
+  const secs = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (secs < 60) return `${Math.floor(secs)}s`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h`;
+  return `${Math.floor(secs / 86400)}d`;
+};
+
+export const isToday = (iso: string | null) =>
+  iso != null && new Date(iso).toDateString() === new Date().toDateString();
+
+/** "1 run" / "3 runs" -- the console says small numbers in words often enough to matter. */
+export const plural = (n: number, one: string, many = `${one}s`) =>
+  `${n} ${n === 1 ? one : many}`;

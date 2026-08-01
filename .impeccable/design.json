@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-31T00:00:00.000Z",
+  "title": "Design System: NexusGTM Control Plane",
+  "extensions": {
+    "colorMeta": {
+      "signal-blue": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "darkValue": "#3987e5",
+        "tonalRamp": ["oklch(20% 0.07 255)", "oklch(30% 0.10 255)", "oklch(40% 0.13 255)", "oklch(50% 0.15 255)", "oklch(58% 0.16 255)", "oklch(70% 0.12 255)", "oklch(82% 0.07 255)", "oklch(94% 0.03 255)"]
+      },
+      "series-orange": {
+        "role": "secondary",
+        "displayName": "Ember Orange",
+        "darkValue": "#f2794a",
+        "tonalRamp": ["oklch(22% 0.08 42)", "oklch(32% 0.11 42)", "oklch(43% 0.14 42)", "oklch(54% 0.16 42)", "oklch(65% 0.17 42)", "oklch(76% 0.13 42)", "oklch(86% 0.08 42)", "oklch(95% 0.03 42)"]
+      },
+      "series-green": {
+        "role": "secondary",
+        "displayName": "Meter Green",
+        "darkValue": "#2fcb92",
+        "tonalRamp": ["oklch(22% 0.06 165)", "oklch(32% 0.08 165)", "oklch(43% 0.11 165)", "oklch(54% 0.13 165)", "oklch(66% 0.14 165)", "oklch(77% 0.11 165)", "oklch(87% 0.07 165)", "oklch(95% 0.03 165)"]
+      },
+      "status-good": {
+        "role": "tertiary",
+        "displayName": "Clear Green",
+        "darkValue": "#17bd17",
+        "tonalRamp": ["oklch(20% 0.09 143)", "oklch(29% 0.12 143)", "oklch(39% 0.16 143)", "oklch(49% 0.18 143)", "oklch(58% 0.20 143)", "oklch(71% 0.15 143)", "oklch(83% 0.09 143)", "oklch(94% 0.04 143)"]
+      },
+      "status-warning": {
+        "role": "tertiary",
+        "displayName": "Hold Amber",
+        "darkValue": "#fab219",
+        "tonalRamp": ["oklch(28% 0.07 80)", "oklch(39% 0.09 80)", "oklch(50% 0.12 80)", "oklch(61% 0.14 80)", "oklch(72% 0.15 80)", "oklch(80% 0.16 80)", "oklch(89% 0.10 80)", "oklch(96% 0.04 80)"]
+      },
+      "status-serious": {
+        "role": "tertiary",
+        "displayName": "Halt Orange",
+        "darkValue": "#ec835a",
+        "tonalRamp": ["oklch(24% 0.06 42)", "oklch(34% 0.08 42)", "oklch(45% 0.10 42)", "oklch(57% 0.12 42)", "oklch(71% 0.13 42)", "oklch(81% 0.09 42)", "oklch(89% 0.06 42)", "oklch(96% 0.02 42)"]
+      },
+      "status-critical": {
+        "role": "tertiary",
+        "displayName": "Fault Red",
+        "darkValue": "#ef6161",
+        "tonalRamp": ["oklch(20% 0.08 26)", "oklch(29% 0.11 26)", "oklch(39% 0.14 26)", "oklch(48% 0.17 26)", "oklch(56% 0.19 26)", "oklch(69% 0.14 26)", "oklch(82% 0.09 26)", "oklch(94% 0.03 26)"]
+      },
+      "page": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "darkValue": "#0d0d0d",
+        "usage": "The chassis: system bar and rail. Also the recessed fill of a payload well inside the pane.",
+        "tonalRamp": ["oklch(15% 0.002 100)", "oklch(26% 0.003 100)", "oklch(38% 0.004 100)", "oklch(50% 0.005 100)", "oklch(62% 0.006 100)", "oklch(75% 0.005 100)", "oklch(88% 0.004 100)", "oklch(98% 0.002 100)"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Card",
+        "darkValue": "#1a1a19",
+        "usage": "The readout: the pane, and input fields.",
+        "tonalRamp": ["oklch(16% 0.002 100)", "oklch(27% 0.003 100)", "oklch(39% 0.004 100)", "oklch(51% 0.005 100)", "oklch(63% 0.006 100)", "oklch(76% 0.005 100)", "oklch(89% 0.003 100)", "oklch(99% 0.002 100)"]
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "darkValue": "#ffffff",
+        "tonalRamp": ["oklch(8% 0 0)", "oklch(20% 0 0)", "oklch(33% 0 0)", "oklch(46% 0 0)", "oklch(59% 0 0)", "oklch(72% 0 0)", "oklch(85% 0 0)", "oklch(96% 0 0)"]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "darkValue": "#c3c2b7",
+        "tonalRamp": ["oklch(15% 0.003 90)", "oklch(27% 0.004 90)", "oklch(40% 0.004 90)", "oklch(52% 0.005 90)", "oklch(64% 0.006 90)", "oklch(76% 0.006 90)", "oklch(88% 0.004 90)", "oklch(96% 0.002 90)"]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Ash",
+        "darkValue": "#898781",
+        "tonalRamp": ["oklch(16% 0.003 90)", "oklch(27% 0.004 90)", "oklch(38% 0.005 90)", "oklch(49% 0.006 90)", "oklch(60% 0.006 90)", "oklch(73% 0.005 90)", "oklch(86% 0.004 90)", "oklch(96% 0.002 90)"]
+      },
+      "rule-grid": {
+        "role": "neutral",
+        "displayName": "Grid Rule",
+        "darkValue": "#2c2c2a",
+        "tonalRamp": ["oklch(17% 0.004 95)", "oklch(28% 0.005 95)", "oklch(40% 0.006 95)", "oklch(52% 0.007 95)", "oklch(64% 0.008 95)", "oklch(77% 0.008 95)", "oklch(89% 0.008 95)", "oklch(97% 0.004 95)"]
+      },
+      "rule-baseline": {
+        "role": "neutral",
+        "displayName": "Baseline Rule",
+        "darkValue": "#383835",
+        "tonalRamp": ["oklch(18% 0.005 95)", "oklch(29% 0.007 95)", "oklch(41% 0.009 95)", "oklch(53% 0.011 95)", "oklch(65% 0.012 95)", "oklch(79% 0.012 95)", "oklch(89% 0.008 95)", "oklch(97% 0.004 95)"]
+      },
+      "border-hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "darkValue": "rgba(255, 255, 255, 0.1)",
+        "tonalRamp": ["rgba(11,11,11,0.03)", "rgba(11,11,11,0.05)", "rgba(11,11,11,0.08)", "rgba(11,11,11,0.10)", "rgba(11,11,11,0.15)", "rgba(11,11,11,0.25)", "rgba(11,11,11,0.40)", "rgba(11,11,11,0.60)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Never standalone. Only the load-bearing figure inside an Answer sentence." },
+      "headline": { "displayName": "Headline", "purpose": "The pane title, once per pane. Takes the mono family when the title is an account reference." },
+      "answer": { "displayName": "Answer", "purpose": "The briefing's answer sentences. Regular weight at headline size -- a statement, not a heading." },
+      "title": { "displayName": "Title", "purpose": "The wordmark. The only remaining use of this step." },
+      "body": { "displayName": "Body", "purpose": "The working size and the document base: rail rows, tables, rationale, form controls." },
+      "caption": { "displayName": "Caption", "purpose": "Supporting facts, timestamps, rail costs, endpoints, text buttons." },
+      "label": { "displayName": "Label", "purpose": "Rail section and block headings and table column headers, in Ash. Also the chip size, un-uppercased." },
+      "mono": { "displayName": "Mono", "purpose": "Machine values a reader may need to copy exactly: references, endpoints, payloads, raw status codes." }
+    },
+    "shadows": [
+      { "name": "floating-overlay", "value": "0 4px 14px rgba(0, 0, 0, 0.1)", "purpose": "The only shadow in the system. Chart tooltips. Depth otherwise remains an open decision." }
+    ],
+    "motion": [
+      { "name": "ease-console", "value": "cubic-bezier(0.2, 0, 0.15, 1)", "purpose": "The single easing curve." },
+      { "name": "fast", "value": "140ms", "purpose": "State feedback: hover, selection." },
+      { "name": "slow", "value": "220ms", "purpose": "Structural movement: the detail pane sliding over the rail below 900px." },
+      { "name": "breathe", "value": "2.4s opacity 1 -> 0.25 -> 1, infinite", "purpose": "The live dot while a run is open. Reports that the console is polling." },
+      { "name": "sweep", "value": "1.4s linear gradient traverse, infinite", "purpose": "Skeleton loading." }
+    ],
+    "breakpoints": [
+      { "name": "console-collapse", "value": "900px", "purpose": "The only media query. Structural: the rail becomes the whole screen and the pane slides in over it as a detail view." }
+    ],
+    "container": [
+      { "name": "system-bar", "value": "height: 46px", "purpose": "Fixed chassis, full width, Paper ground." },
+      { "name": "rail", "value": "width: 340px", "purpose": "Fixed chassis, Paper ground, owns its own scroll." },
+      { "name": "pane", "value": "max-width: 860px; padding: 26px 28px 72px", "purpose": "The readout. Fluid column on a Card ground, held to a readable measure." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Rail Row",
+      "kind": "nav",
+      "refersTo": "rail-row",
+      "description": "One orchestration in the rail. Selection is a background tint plus aria-current -- never a coloured left border.",
+      "html": "<div class=\"ds-rail\"><button type=\"button\" class=\"ds-rail-row\"><span class=\"ds-headline\"><span class=\"ds-who\">ACME-1001</span><span class=\"ds-cost\">$0.0279</span></span><span class=\"ds-sub\"><span class=\"ds-dot ds-good\"></span><span class=\"ds-state\">Completed · Qualified</span><span class=\"ds-when\">1:55 pm</span></span></button><button type=\"button\" class=\"ds-rail-row\" aria-current=\"true\"><span class=\"ds-headline\"><span class=\"ds-who\">ACME-1002</span><span class=\"ds-cost\">$0.0095</span></span><span class=\"ds-sub\"><span class=\"ds-dot ds-attention\"></span><span class=\"ds-state\">Stopped · repeating</span><span class=\"ds-when\">30 Jul</span></span></button></div>",
+      "css": ".ds-rail { background: var(--page, #f9f9f7); border: 1px solid var(--border, rgba(11,11,11,0.1)); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; max-width: 340px; } .ds-rail-row { display: block; width: 100%; text-align: left; appearance: none; background: none; border: none; font: inherit; font-size: 13px; color: var(--text-secondary, #52514e); padding: 8px 14px; cursor: pointer; transition: background 140ms cubic-bezier(0.2,0,0.15,1); } .ds-rail-row:hover { background: color-mix(in srgb, var(--text-primary, #0b0b0b) 4%, transparent); } .ds-rail-row[aria-current=\"true\"] { background: color-mix(in srgb, var(--series-1, #2470cc) 12%, transparent); color: var(--text-primary, #0b0b0b); } .ds-rail-row:focus-visible { outline: 2px solid var(--series-1, #2470cc); outline-offset: -2px; } .ds-headline { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; } .ds-who { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--text-primary, #0b0b0b); } .ds-rail-row[aria-current=\"true\"] .ds-who { font-weight: 600; } .ds-cost { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted, #6e6c66); } .ds-sub { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 12px; color: var(--muted, #6e6c66); } .ds-when { margin-left: auto; font-variant-numeric: tabular-nums; } .ds-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; } .ds-good { color: var(--good, #0a7c0a); } .ds-attention { color: var(--serious, #b4471a); }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "chip-good",
+      "description": "Five tones. The dot is decoration; the word is the meaning, and the title attribute explains it in a sentence.",
+      "html": "<div class=\"ds-chip-row\"><span class=\"ds-chip ds-c-good\" title=\"Ran to a conclusion the planner was satisfied with.\">Completed</span><span class=\"ds-chip ds-c-live\">Running</span><span class=\"ds-chip ds-c-attention\" title=\"The same agent was picked twice with the same input.\">Stopped · repeating</span><span class=\"ds-chip ds-c-fault\">Error</span><span class=\"ds-chip ds-c-neutral\">No verdict</span></div>",
+      "css": ".ds-chip-row { display: flex; gap: 8px; flex-wrap: wrap; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; } .ds-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border, rgba(11,11,11,0.1)); white-space: nowrap; } .ds-chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; } .ds-c-good { color: var(--good, #0a7c0a); } .ds-c-attention { color: var(--serious, #b4471a); } .ds-c-fault { color: var(--critical, #d03b3b); } .ds-c-neutral { color: var(--text-secondary, #52514e); } .ds-c-live { color: var(--series-1, #2470cc); } .ds-c-live::before { animation: ds-breathe 2.4s cubic-bezier(0.2,0,0.15,1) infinite; } @keyframes ds-breathe { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } } @media (prefers-reduced-motion: reduce) { .ds-c-live::before { animation: none; } }"
+    },
+    {
+      "name": "Block with Answer",
+      "kind": "custom",
+      "refersTo": "exception-row",
+      "description": "The briefing's unit: a label, a rule, an answer sentence with its figure inline at display size, and a support line.",
+      "html": "<section class=\"ds-block\"><h2 class=\"ds-block-label\">Spend</h2><p class=\"ds-answer\"><span class=\"ds-fig\">$0.0656</span> today, across 3 leads.</p><p class=\"ds-support\"><span>$0.0264 per qualified lead, all time</span><span class=\"ds-sep\">$0.0139 per orchestration, all time</span></p></section>",
+      "css": ".ds-block { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; padding-top: 22px; border-top: 1px solid var(--grid, #e1e0d9); } .ds-block-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted, #6e6c66); margin: 0 0 12px; } .ds-answer { font-size: 20px; font-weight: 400; line-height: 1.35; letter-spacing: -0.01em; color: var(--text-primary, #0b0b0b); margin: 0; max-width: 46ch; text-wrap: balance; } .ds-fig { font-size: 27px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; } .ds-support { margin: 10px 0 0; font-size: 12px; color: var(--muted, #6e6c66); display: flex; flex-wrap: wrap; gap: 4px 10px; } .ds-sep::before { content: '·'; margin-right: 10px; color: var(--baseline, #c3c2b7); }"
+    },
+    {
+      "name": "Exception Row",
+      "kind": "custom",
+      "refersTo": "exception-row",
+      "description": "The attention list. Reference, plain-language explanation, timestamp. Rules between, no box around.",
+      "html": "<ul class=\"ds-exceptions\"><li><button type=\"button\" class=\"ds-exception\"><span class=\"ds-who\">ACME-1002</span><span class=\"ds-what\">The same agent was picked twice with the same input, so the run was cut off.</span><span class=\"ds-when\">30 Jul</span></button></li><li><button type=\"button\" class=\"ds-exception\"><span class=\"ds-who\">ACME-1004</span><span class=\"ds-what\">Spend passed the ceiling mid-run, so the run was cut off.</span><span class=\"ds-when\">29 Jul</span></button></li></ul>",
+      "css": ".ds-exceptions { list-style: none; margin: 0; padding: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; } .ds-exceptions li + li { border-top: 1px solid var(--grid, #e1e0d9); } .ds-exception { display: flex; align-items: baseline; gap: 12px; width: 100%; text-align: left; appearance: none; background: none; border: none; font: inherit; font-size: 13px; color: inherit; padding: 11px 8px 11px 0; cursor: pointer; transition: background 140ms cubic-bezier(0.2,0,0.15,1); } .ds-exception:hover { background: color-mix(in srgb, var(--series-1, #2470cc) 6%, transparent); } .ds-exception:focus-visible { outline: 2px solid var(--series-1, #2470cc); outline-offset: 2px; border-radius: 6px; } .ds-exception .ds-who { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; flex: none; } .ds-exception .ds-what { flex: 1; color: var(--text-secondary, #52514e); } .ds-exception .ds-when { font-size: 12px; color: var(--muted, #6e6c66); font-variant-numeric: tabular-nums; flex: none; }"
+    },
+    {
+      "name": "Decision Trail",
+      "kind": "custom",
+      "refersTo": "rail-row",
+      "description": "The signature component. Floating Signal Blue nodes on a rule; three descending registers per step -- decision, reasoning, alternatives.",
+      "html": "<ol class=\"ds-trail\"><li><div class=\"ds-step-agent\">1. Enrichment<span class=\"ds-dept\"> · marketing</span></div><div class=\"ds-step-rationale\">Lead carries no firmographics; scoring without them produces noise.</div><div class=\"ds-step-candidates\">Also considered Scoring, Routing · 31/07/26, 13:55</div></li><li class=\"ds-terminal\"><div class=\"ds-step-agent\">2. Stopped here</div><div class=\"ds-step-rationale\">Score 5 is far below the disqualify threshold. Terminating without routing.</div><div class=\"ds-step-candidates\">Also considered Routing, Outreach draft · 31/07/26, 13:56</div></li></ol>",
+      "css": ".ds-trail { list-style: none; padding: 0; margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; } .ds-trail li { position: relative; padding: 0 0 20px 26px; border-left: 2px solid var(--grid, #e1e0d9); } .ds-trail li:last-child { border-left-color: transparent; padding-bottom: 0; } .ds-trail li::before { content: ''; position: absolute; left: -6px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--series-1, #2470cc); border: 2px solid var(--surface-1, #fcfcfb); } .ds-trail li.ds-terminal::before { background: var(--serious, #b4471a); } .ds-step-agent { font-weight: 600; font-size: 13px; color: var(--text-primary, #0b0b0b); } .ds-dept { font-weight: 400; color: var(--muted, #6e6c66); } .ds-step-rationale { color: var(--text-secondary, #52514e); font-size: 13px; margin-top: 2px; max-width: 68ch; } .ds-step-candidates { color: var(--muted, #6e6c66); font-size: 11px; margin-top: 4px; }"
+    },
+    {
+      "name": "Data Table",
+      "kind": "custom",
+      "refersTo": "payload-well",
+      "description": "Uppercase Ash headers, hairline dividers, tabular right-aligned figures, one precision per column. No hover -- the rail owns selection.",
+      "html": "<div class=\"ds-scroll-x\"><table class=\"ds-table\"><thead><tr><th class=\"ds-num\">Step</th><th>Department</th><th>Agent</th><th class=\"ds-num\">Cost</th></tr></thead><tbody><tr><td class=\"ds-num\">1</td><td>marketing</td><td>Enrichment</td><td class=\"ds-num\">$0.0024</td></tr><tr><td class=\"ds-num\">2</td><td>revops</td><td>Scoring</td><td class=\"ds-num\">$0.0067</td></tr></tbody></table></div>",
+      "css": ".ds-scroll-x { overflow-x: auto; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; } .ds-table { width: 100%; border-collapse: collapse; font-size: 13px; color: var(--text-primary, #0b0b0b); } .ds-table th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted, #6e6c66); padding: 8px 14px 8px 0; border-bottom: 1px solid var(--border, rgba(11,11,11,0.1)); white-space: nowrap; } .ds-table td { padding: 10px 14px 10px 0; border-bottom: 1px solid var(--grid, #e1e0d9); vertical-align: top; } .ds-table td:last-child, .ds-table th:last-child { padding-right: 0; } .ds-table .ds-num { text-align: right; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "The rail's filter. The placeholder states both behaviours; the label is visually hidden.",
+      "html": "<form class=\"ds-search\" role=\"search\"><label class=\"ds-vh\" for=\"ds-filter\">Filter by account, or press Enter to search every past run</label><input id=\"ds-filter\" class=\"ds-input\" type=\"search\" placeholder=\"Filter accounts — Enter to search runs\" /></form>",
+      "css": ".ds-search { padding: 12px; border-bottom: 1px solid var(--border, rgba(11,11,11,0.1)); background: var(--page, #f9f9f7); display: flex; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; } .ds-input { font: inherit; font-size: 13px; flex: 1; min-width: 0; padding: 7px 10px; border-radius: 7px; border: 1px solid var(--border, rgba(11,11,11,0.1)); background: var(--surface-1, #fcfcfb); color: var(--text-primary, #0b0b0b); } .ds-input::placeholder { color: var(--muted, #6e6c66); } .ds-input:focus-visible { outline: 2px solid var(--series-1, #2470cc); outline-offset: 2px; } .ds-vh { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }"
+    },
+    {
+      "name": "Text Button",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "The system's only button form outside the rail. No fill, no border, no radius.",
+      "html": "<button type=\"button\" class=\"ds-linkish\">See the full breakdown</button>",
+      "css": ".ds-linkish { appearance: none; background: none; border: none; padding: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 12px; color: var(--series-1, #2470cc); cursor: pointer; } .ds-linkish:hover { text-decoration: underline; } .ds-linkish:focus-visible { outline: 2px solid var(--series-1, #2470cc); outline-offset: 2px; border-radius: 6px; }"
+    },
+    {
+      "name": "Payload Well",
+      "kind": "custom",
+      "refersTo": "payload-well",
+      "description": "Recession by inversion: fills with the chassis colour inside the pane, so it reads as cut in rather than raised up.",
+      "html": "<pre class=\"ds-payload\">{\n  \"fit_score\": 5,\n  \"free_email_domain\": true,\n  \"outcome\": \"disqualified\"\n}</pre>",
+      "css": ".ds-payload { background: var(--page, #f9f9f7); border: 1px solid var(--border, rgba(11,11,11,0.1)); border-radius: 6px; padding: 12px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; margin: 0; max-height: 340px; color: var(--text-primary, #0b0b0b); }"
+    },
+    {
+      "name": "Skeleton",
+      "kind": "custom",
+      "refersTo": "rail-row",
+      "description": "Loading is a shape at the size of the content it replaces, never a spinner in the middle of content.",
+      "html": "<div class=\"ds-skel-stack\"><span class=\"ds-skeleton\" style=\"width:180px;height:20px\"></span><span class=\"ds-skeleton\" style=\"width:240px;height:12px\"></span></div>",
+      "css": ".ds-skel-stack { display: flex; flex-direction: column; gap: 8px; } .ds-skeleton { display: inline-block; border-radius: 6px; background: linear-gradient(90deg, var(--grid, #e1e0d9) 0%, color-mix(in srgb, var(--grid, #e1e0d9) 45%, transparent) 50%, var(--grid, #e1e0d9) 100%); background-size: 200% 100%; animation: ds-sweep 1.4s linear infinite; } @keyframes ds-sweep { to { background-position: -200% 0; } } @media (prefers-reduced-motion: reduce) { .ds-skeleton { animation: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Instrument Panel",
+    "overview": "This is a calibrated readout, not a dashboard-as-brand-expression. The chassis is a muted warm neutral that asks for nothing; every colored pixel on the screen is a measurement. One accent and four status colors are the entire chromatic budget, and each one means a specific thing. When a surface is grey, it is grey because nothing there needed reporting.\n\nThe register is precise, unhurried, understated — confidence through restraint. Type is small and dense but never crowded, figures are tabular so columns of money line up on the decimal, and hierarchy is built almost entirely from weight, case, and colour of text rather than from size jumps.\n\nThe second register is calm but alert. The system's job is to leave the reader alone until something needs them: a halted run, an unreachable department, a run that cost more than it should have. Those states get colour that nothing else on the screen is allowed to borrow.\n\nThe system is realised as a console: a fixed chassis (system bar and rail) around a single live readout (the pane). There are no tabs and no page navigation. The rail is the bezel and never changes; the pane is what is being measured.",
+    "keyCharacteristics": [
+      "A warm-neutral chassis — off-white with a green-yellow cast, deliberately not blue-grey — with the rail one tonal step recessed from the pane.",
+      "One accent (Signal Blue), which marks selection and data and nothing else.",
+      "Depth from hairlines and tonal layering; the system is flat with a single overlay shadow.",
+      "Text-led hierarchy: uppercase micro-labels, 600/650 weights, tabular figures.",
+      "No web fonts, no icon set, no imagery. The system font stack is the whole typographic palette.",
+      "Status is always a dot and a word — colour is never the sole carrier of meaning.",
+      "Prose carries the answers; the load-bearing figure is set inline at display size."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Signal Blue is the only non-semantic colour in the interface. It never becomes a large fill, a filled button, a header band, or a brand wash. Its findability is the product — the selected rail row is locatable in peripheral vision precisely because nothing else on the screen is blue. If a new surface wants a second accent, the answer is weight or case, not another hue.", "section": "colors" },
+      { "name": "The Reserved Signal Rule", "body": "The four status colours are semantic-only. Nothing decorative may use Clear Green, Hold Amber, Halt Orange, or Fault Red — not a chart series, not a hover state. A reader must be able to assume that orange on this screen means a guardrail fired.", "section": "colors" },
+      { "name": "The Dark Theme Parity Rule", "body": "Dark is a peer theme, not a derivative. Every colour token carries both values, and adding one without the other is an incomplete change. Series colours lighten in dark mode; they never darken.", "section": "colors" },
+      { "name": "The Quiet Heading Rule", "body": "Headings are smaller and lighter than the content they introduce. An 11px Ash uppercase label sits above a 20px answer sentence. The reader is looking for the answer, not for the word \"spend\".", "section": "typography" },
+      { "name": "The Figure-In-Sentence Rule", "body": "Numbers are not presented as stat tiles. The load-bearing figure is set at display size inside the sentence that explains it, so the number and its meaning are read in one movement and a figure can never appear without its unit of meaning.", "section": "typography" },
+      { "name": "The Tabular Figures Rule", "body": "Every number that appears in a column is font-variant-numeric: tabular-nums and, in tables, right-aligned. One column uses one precision: costs below a dollar all carry four decimal places, because a column mixing $0.01 and $0.0056 cannot be compared by eye.", "section": "typography" },
+      { "name": "The Fixed Chassis Rule", "body": "The bar and the rail never change with selection. Only the pane swaps. A reader who has found a row keeps their place in the list no matter what they open.", "section": "layout" },
+      { "name": "The Structural Breakpoint Rule", "body": "There is exactly one media query (900px), and it exists to change structure, not size: below it the rail becomes the whole screen and the pane slides in over it as a detail view with its own back control. Everything else responsive is intrinsic. Reach for intrinsic sizing before adding a second query.", "section": "layout" },
+      { "name": "The Table Scroll Rule", "body": "Every table is wrapped in an overflow-x: auto container. A wide table scrolls inside its own block; the page body never scrolls sideways.", "section": "layout" },
+      { "name": "The Hairline Rule", "body": "Every structural boundary is exactly 1px of alpha-black, never a solid colour and never thicker. The one exception is the decision trail's 2px spine, which is a drawn line rather than a boundary.", "section": "shapes" },
+      { "name": "The No-Container Rule", "body": "Content is separated by rules and space, not by boxes. Do not reintroduce a card, panel, or tile to group things — a label plus a rule does the same work without adding a border, a radius, a shadow, and an inset to every group on the screen.", "section": "shapes" },
+      { "name": "The Motion-Means-State Rule", "body": "If an animation is not reporting a state the reader would otherwise have to infer, it does not belong. There are no entrance animations, no scroll choreography, and no page-load sequences — the console loads into a task.", "section": "motion" }
+    ],
+    "dos": [
+      "Do spend Signal Blue on selection and data only. Its scarcity is the mechanism.",
+      "Do give every new colour token both a light and a dark value in the same change, and check it clears 4.5:1 against its own ground in both.",
+      "Do render status as a dot and a word, with a plain-language sentence in title.",
+      "Do set the load-bearing figure inside the sentence that explains it.",
+      "Do use one precision per column — four decimal places below a dollar.",
+      "Do separate content with a label and a rule rather than a box.",
+      "Do translate halt codes and agent identifiers into outcome language, and keep the raw value reachable in the detail pane's Raw values block.",
+      "Do state a below-threshold condition honestly — refuse to draw a chart that would mislead, and say why.",
+      "Do keep the chassis fixed when the pane changes."
+    ],
+    "donts": [
+      "Don't use Clear Green, Hold Amber, Halt Orange, or Fault Red for anything that isn't status. They are reserved signals.",
+      "Don't introduce a second interface accent. If something needs to stand apart, change its weight, case, or size.",
+      "Don't reintroduce cards, panels, or tiles. See The No-Container Rule.",
+      "Don't add a fourth corner radius. 6 / 7 / 999 covers everything the console has.",
+      "Don't mark selection with a coloured left border; use the background tint and aria-current.",
+      "Don't thicken the hairline past 1px or make it a solid colour.",
+      "Don't add a web font. The native system stack is a deliberate choice.",
+      "Don't animate anything that isn't reporting state.",
+      "Don't hardcode the three current departments or their agent names. The taxonomy comes from the registry and must absorb a fourth department with no visual change.",
+      "Don't read the current flatness as a ban on depth — but if you introduce elevation, introduce a vocabulary, not a one-off shadow."
+    ]
+  }
+}

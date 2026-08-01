@@ -1,20 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
+import type { Reading, Tone } from "./vocabulary";
 
-/** Status is never carried by color alone -- the badge always shows its label. */
-export function StatusBadge({ status }: { status: string | null }) {
-  if (!status) return <span className="badge neutral">unknown</span>;
-  const tone =
-    status === "completed" || status === "ok" || status === "qualified"
-      ? "good"
-      : status === "running"
-        ? "neutral"
-        : status.startsWith("halted") || status === "invalid_input" || status === "disqualified"
-          ? "warn"
-          : "bad";
-  return <span className={`badge ${tone}`}>{status.replace(/_/g, " ")}</span>;
+/**
+ * Status is never carried by colour alone -- every chip renders its word.
+ * The tone only reinforces what the label already says.
+ */
+export function Chip({ reading }: { reading: Reading | null }) {
+  if (!reading) return <span className="chip neutral">No verdict</span>;
+  return (
+    <span className={`chip ${reading.tone}`} title={reading.gloss || undefined}>
+      {reading.label}
+    </span>
+  );
 }
 
-/** Fetch + poll helper. The live view polls; there are no websockets. */
+/**
+ * Decorative only. Every caller prints the status word immediately beside it, so
+ * announcing the tone again would just make a screen reader say it twice.
+ */
+export function Dot({ tone }: { tone: Tone }) {
+  return <span className={`dot ${tone}`} aria-hidden="true" />;
+}
+
+/** Fetch + poll helper. The console polls; there are no websockets. */
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], pollMs?: number) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,9 +46,10 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], pollMs?: numb
       }
     };
     load();
-    if (!pollMs) return () => {
-      alive = false;
-    };
+    if (!pollMs)
+      return () => {
+        alive = false;
+      };
     const timer = setInterval(load, pollMs);
     return () => {
       alive = false;
@@ -51,39 +60,18 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], pollMs?: numb
   return { data, error, loading };
 }
 
-export function Panel({
+export function Block({
   title,
-  hint,
   children,
 }: {
   title: string;
-  hint?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="card">
+    <section className="block">
       <h2>{title}</h2>
-      {hint && <p className="hint">{hint}</p>}
       {children}
     </section>
-  );
-}
-
-export function Tile({
-  label,
-  value,
-  note,
-}: {
-  label: string;
-  value: string;
-  note?: string;
-}) {
-  return (
-    <div className="tile">
-      <div className="label">{label}</div>
-      <div className="value">{value}</div>
-      {note && <div className="note">{note}</div>}
-    </div>
   );
 }
 
@@ -111,6 +99,13 @@ export function ChartTooltip({
   );
 }
 
-export function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="empty">{children}</p>;
+/** Loading is a shape, not a spinner dropped in the middle of content. */
+export function Skeleton({ width, height = 13 }: { width: string; height?: number }) {
+  return (
+    <span
+      className="skeleton"
+      style={{ display: "inline-block", width, height }}
+      aria-hidden="true"
+    />
+  );
 }

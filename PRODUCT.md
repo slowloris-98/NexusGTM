@@ -172,6 +172,9 @@ state, not as a constraint on future work.
 No formal standard was established as a product requirement. Sensible defaults apply, but
 no conformance target is recorded as product truth.
 
-One product-specific note independent of any standard: run status and outcome are
-currently encoded by color alone in badges, and status is the primary thing this audience
-scans for. Non-color encoding is a product concern here, not just a compliance one.
+One product-specific note independent of any standard: status is the first thing this
+audience scans for, so how status renders is a product concern, not just a compliance one.
+Status chips carry a text label alongside the color dot, so meaning does not depend on
+color. As of the console rebuild, every status color also clears 4.5:1 on its own ground in
+both themes, and `:focus-visible` is styled globally. No formal conformance pass has been
+run — these are build-quality floors, not a verified standard.
