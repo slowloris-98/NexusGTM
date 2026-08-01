@@ -17,6 +17,19 @@ colors:
   rule-grid: "#e1e0d9"
   rule-baseline: "#c3c2b7"
   border-hairline: "rgba(11, 11, 11, 0.1)"
+  # Scoped to the system map pane only. See ## Scoped Exceptions.
+  map-ground-lift: "oklch(19% 0.02 265)"
+  map-ground: "oklch(15% 0.014 265)"
+  map-ground-deep: "oklch(10% 0.012 265)"
+  map-core: "oklch(96% 0.02 250)"
+  map-core-ring: "oklch(88% 0.04 250)"
+  map-label: "oklch(93% 0.008 250)"
+  map-label-agent: "oklch(85% 0.008 250)"
+  map-label-dim: "oklch(74% 0.008 250)"
+  map-dormant-text: "oklch(66% 0.008 265)"
+  map-dormant: "oklch(52% 0.008 265)"
+  map-star: "oklch(99% 0 0)"
+  map-star-alt: "oklch(88% 0.03 250)"
 typography:
   display:
     fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif"
@@ -458,6 +471,68 @@ the same floating-node treatment as the decision trail. Gridlines are Grid Rule 
 only; axis lines are Baseline Rule; tick labels are 11px Ash. Tooltips are the one elevated
 surface in the system. Values are labelled directly on bars rather than relying on the axis.
 
+### System map
+
+A radial constellation of the running system: the orchestrator at the centre, a hub per
+department on an evenly spaced ring, and each agent fanned outward across a ±22° arc. It
+runs the scoped dark world described below.
+
+Every edge is a straight line, in three tiers of decreasing weight. The tree is what gives
+the constellation its shape, so it leads; the handoffs are what happened inside it, so they
+recede.
+
+| tier | edge | width | opacity |
+|---|---|---|---|
+| trunk | orchestrator → department | 2.5 | 0.55 |
+| branch | department → agent | 1.75 | 0.42 |
+| flow | agent → agent | 0.75–1.75 | 0.20–0.34 |
+
+Flow edges join agents the planner actually handed off between, and their width and opacity
+scale with how often that handoff occurred. A flow edge whose every observation was rejected
+by the target's schema draws dashed and dimmer still — below a successful handoff on purpose,
+because a route the schema refused should never read as more substantial than one that went
+through. Live and hovered edges jump to near-full opacity; the quiet resting field is what
+lets them carry.
+
+A handoff between two diametrically opposite agents runs through the middle. That is fine:
+the flow layer paints before the orchestrator, whose core and halo cover it.
+
+Node sizes are geometry, not style: they live beside the positions in
+[layout.ts](dashboard/src/graph/layout.ts) and each node carries its own radius, because an
+agent's size depends on how much room its neighbours leave. A department hub renders about
+28px across and an agent about 19px, holding a 1.5:1 ratio. Two clamps keep that safe as the
+system grows — the agent radius is capped against the spacing between adjacent agents, and
+the fan width is capped against the department count. Neither engages at three departments;
+at seven agents in one department the radius eases down rather than letting nodes collide.
+
+Nothing about the composition is per-department: hues are generated from the id-sorted
+department list, positions from the count. A department added to `departments.yaml` takes
+its place with no edit here. There are deliberately **no department icons** — an icon
+cannot be authored for a department that does not exist yet, and a fallback glyph for new
+ones would make the extensibility second-class.
+
+Labels are HTML positioned over the SVG rather than `<text>` inside it, so they stay on the
+type ramp at every pane width instead of scaling down with the viewBox. Department names are
+always visible; **agent names appear only while their node is hovered**, fading in rather
+than popping — seven nodes do not need four permanent captions. The labels layer is
+`aria-hidden`, so the SVG `<desc>` is the accessible source and names every department with
+its full agent roster, including agents that appear in no handoff.
+
+An unreachable department keeps its agents, recovered from the paths of past runs and drawn
+dormant, so stopping a server severs a branch instead of deleting it.
+
+Hover is carried by a **locked-height readout strip** beneath the canvas: one nowrap status
+row and one detail row clamped to two lines, in a box of fixed height. This is structural,
+not stylistic. The canvas is sized from leftover space, so a strip that grew with its text
+would resize the constellation on every hover — and it would, because the registry
+descriptions it prints run to 189 characters against a ~78-character resting line. Every
+state renders the same two rows, so no text can change the height.
+
+Flow edges carry their own hover through a transparent 16px hit stroke layered beneath the
+nodes; a chord's visible stroke is 1–3.4px and no pointer can reliably find it. A hovered
+edge brightens but does **not** dim other branches — department hover owns dimming, and two
+gestures competing for it makes the map twitch when the pointer crosses from a chord to a hub.
+
 ### Skeletons
 
 Loading is a shape at the size of the content it replaces, sweeping a Grid Rule gradient on
@@ -469,17 +544,24 @@ Two durations and one easing curve: `140ms` for state feedback (hover, selection
 `220ms` for structural movement (the mobile pane sliding in), both on
 `cubic-bezier(0.2, 0, 0.15, 1)`.
 
-Only three things animate, and each reports state: the live dot breathing while a run is
-open, the skeleton sweep while data is loading, and the detail pane sliding over the rail on
-narrow screens. Everything else changes instantly.
+Four things animate. Three report state: the live dot breathing while a run is open, the
+skeleton sweep while data is loading, and the detail pane sliding over the rail on narrow
+screens. The fourth — the map's travelling handoff dots — does not, and is a recorded
+exception rather than a quiet breach; see Scoped Exceptions. Everything else changes
+instantly.
 
-`prefers-reduced-motion: reduce` collapses every duration to `0.01ms`.
+`prefers-reduced-motion: reduce` collapses every duration to `0.01ms`. Note that collapsing a
+duration is not the same as removing an animation: anything whose *resting* frame would be
+wrong when frozen has to be hidden outright, which is why the map's dots are `display: none`
+under that query rather than merely stopped.
 
 ### Named Rules
 
 **The Motion-Means-State Rule.** If an animation is not reporting a state the reader would
 otherwise have to infer, it does not belong. There are no entrance animations, no scroll
-choreography, and no page-load sequences — the console loads into a task.
+choreography, and no page-load sequences — the console loads into a task. Exactly one
+exception exists, named and scoped under Scoped Exceptions; a second one is not free to
+appear by pointing at the first.
 
 ## Do's and Don'ts
 
@@ -515,3 +597,56 @@ choreography, and no page-load sequences — the console loads into a task.
   from the registry and must absorb a fourth department with no visual change.
 - **Don't** read the current flatness as a ban on depth — but if you introduce elevation,
   introduce a vocabulary, not a one-off shadow.
+- **Don't** widen the map's exception past `.map-stage`. See below.
+- **Don't** let the map's readout strip size itself from its content. Its height is locked
+  and its rows are clamped precisely because the canvas above it takes the leftover space —
+  a growing strip resizes the constellation on every hover.
+
+## Scoped Exceptions
+
+One surface departs from this system on purpose. Recording it here keeps the rest of the
+system honest — an undocumented departure is drift, and the next person cannot tell which
+of the two is the mistake.
+
+### The system map's dark world
+
+**Scope.** `.map-stage` in [dashboard/src/styles.css](dashboard/src/styles.css) and nothing
+else. The pane heading, the legend chips beneath it, the rail, and the system bar are all
+ordinary console chrome on the console's own surfaces.
+
+**Why.** The user pinned this aesthetic with a reference image. The map is a diagram of a
+running machine rather than a reading surface, and a constellation of coloured department
+branches on a dark field is what makes its structure legible at a glance.
+
+**What it changes.**
+
+- A committed dark ground (`map-ground` family) in **both** themes. The map does not invert
+  with the console around it; it is an instrument display, not a document.
+- A **generated categorical palette** — one hue per department, evenly spaced from the
+  id-sorted list, rendered `oklch(72% 0.16 <hue>)`. This is the one place a second, third,
+  and fourth accent exist. They are a data encoding, not decoration: the hue identifies
+  which department a node belongs to and carries no other meaning.
+- A static starfield, the only purely decorative *static* element in the entire system.
+- **Continuous travelling dots on every handoff edge**, running sender to receiver. These
+  animate at rest, so by the Motion-Means-State Rule's own definition they are decoration.
+  They earn their place by making direction legible — a straight line between two agents
+  otherwise cannot say which way the handoff went — and they stay partly informational
+  because a wholly-rejected handoff gets no dot: nothing flowed, so nothing travels. Every
+  dot moves at one speed (duration derives from edge length), staggered deterministically so
+  they neither fire in lockstep nor reshuffle between polls, and capped at 24 edges.
+
+**What it does not change.**
+
+- The four status hues — Clear Green, Hold Amber, Halt Orange, Fault Red — do **not** appear
+  in the map at all. The Reserved Signal Rule holds without qualification.
+- Signal Blue is not used as an accent inside the map; the department hues replace it there.
+- The type ramp holds. Labels are HTML at documented steps, not scaled SVG text.
+- The node pulse still means an agent is working and the core pulse still means the planner
+  is choosing; the travelling dots above are the *only* motion here that reports nothing.
+- The starfield stays deliberately **static** — a continuously animating 260-circle field
+  would repaint forever to report nothing, and one motion exception is the budget.
+- `prefers-reduced-motion` still removes every animation, dots included.
+
+**The boundary is the rule.** A future surface wanting a dark ground or a second accent does
+not inherit this exception by pointing at it. It argues its own case and gets its own entry
+here, or it uses the system.

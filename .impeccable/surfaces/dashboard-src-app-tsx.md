@@ -8,7 +8,8 @@ related_targets: ["dashboard/src/styles.css","dashboard/src/components.tsx"]
 # Surface: NexusGTM control plane (single console screen)
 
 **Scope.** The whole dashboard: `dashboard/src/**`. One screen replaces the five-tab
-structure. Frontend only — the five existing API endpoints are used exactly as they are.
+structure. Frontend only, with one exception: `list_orchestrations` gained an additive
+`agent_path` field so the map can draw real handoffs (see Map below). No new routes.
 
 **Visitor mode.** Operate.
 
@@ -48,6 +49,25 @@ structure reverts to a console for a job nobody does — it is the load-bearing 
   ahead of the runs table, because a decision without its rationale is incomplete.
 - Engineering vocabulary is translated at the surface (halt codes and agent identifiers
   become outcome language) with the raw value preserved in the detail pane, never dropped.
+
+**Map (third pinned rail row).**
+
+- The system as a radial constellation, in a scoped dark world pinned by the user against a
+  reference image. Recorded in DESIGN.md > Scoped Exceptions; the exception stops at
+  `.map-stage`.
+- Edges between agents are **observed handoffs**, not a declared topology — agents never
+  call each other, so there is nothing to declare. Derived frontend-side from `agent_path`.
+- Liveness comes from the last step of a running orchestration's path, which carries its
+  department and so maps to exactly one node. An empty path means the planner is choosing,
+  and the centre pulses instead.
+- Nothing is per-department: hues are generated from the id-sorted list, positions from the
+  count, and there are deliberately no department icons. A fourth department appears with no
+  frontend edit — verified by adding one to `departments.yaml` and restarting the API.
+- An unreachable department keeps its agents, recovered from run history, so stopping a
+  server severs a branch rather than deleting it.
+- Labels are HTML over the SVG so they hold the type ramp at any pane width.
+- The component is exported as `SystemMap`, not `Map`: an export named `Map` shadows the
+  global `Map` constructor in every module that imports it.
 
 **Unresolved.**
 - Elevation remains open per DESIGN.md; this build stays flat with hairlines and a tonal

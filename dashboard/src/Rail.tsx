@@ -6,6 +6,7 @@ import { readAgent, readOutcome, readStatus } from "./vocabulary";
 export type Selection =
   | { kind: "briefing" }
   | { kind: "spend" }
+  | { kind: "map" }
   | { kind: "orchestration"; id: string };
 
 export const sameSelection = (a: Selection, b: Selection) =>
@@ -80,6 +81,7 @@ export function Rail({
   onSelect,
   spendToday,
   attentionCount,
+  agentCount,
 }: {
   rows: Orchestration[];
   term: string;
@@ -91,6 +93,7 @@ export function Rail({
   onSelect: (next: Selection) => void;
   spendToday: number | null;
   attentionCount: number;
+  agentCount: number;
 }) {
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -184,6 +187,17 @@ export function Rail({
                 Spend
                 {spendToday != null && (
                   <span className="trailing">{usd(spendToday)}</span>
+                )}
+              </button>
+              <button
+                type="button"
+                className="rail-row pinned"
+                aria-current={selection.kind === "map"}
+                onClick={() => onSelect({ kind: "map" })}
+              >
+                Map
+                {agentCount > 0 && (
+                  <span className="trailing">{plural(agentCount, "agent")}</span>
                 )}
               </button>
             </Section>

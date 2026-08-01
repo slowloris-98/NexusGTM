@@ -4,6 +4,7 @@ import { useAsync } from "./components";
 import { Rail, type Selection } from "./Rail";
 import { Briefing } from "./panes/Briefing";
 import { Orchestration } from "./panes/Orchestration";
+import { SystemMap } from "./panes/SystemMap";
 import { Spend } from "./panes/Spend";
 import { needsAttention } from "./vocabulary";
 
@@ -69,6 +70,7 @@ export default function App() {
 
   const unreachable = depts?.unreachable ?? [];
   const deptCount = depts?.departments.length ?? 0;
+  const agentCount = depts?.departments.reduce((sum, d) => sum + d.agents.length, 0) ?? 0;
 
   return (
     <div className={`console${selection.kind === "orchestration" ? " detail-open" : ""}`}>
@@ -101,10 +103,11 @@ export default function App() {
         onSelect={setSelection}
         spendToday={spendToday}
         attentionCount={attentionCount}
+        agentCount={agentCount}
       />
 
       <main className="pane" aria-live="polite">
-        <div className="pane-inner">
+        <div className={`pane-inner${selection.kind === "map" ? " is-map" : ""}`}>
           <button
             type="button"
             className="pane-back"
@@ -134,6 +137,8 @@ export default function App() {
             />
           ) : selection.kind === "spend" ? (
             <Spend />
+          ) : selection.kind === "map" ? (
+            <SystemMap depts={depts} rows={rows} />
           ) : (
             <Orchestration id={selection.id} />
           )}

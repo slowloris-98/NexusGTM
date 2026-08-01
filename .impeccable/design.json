@@ -95,6 +95,34 @@
         "displayName": "Hairline",
         "darkValue": "rgba(255, 255, 255, 0.1)",
         "tonalRamp": ["rgba(11,11,11,0.03)", "rgba(11,11,11,0.05)", "rgba(11,11,11,0.08)", "rgba(11,11,11,0.10)", "rgba(11,11,11,0.15)", "rgba(11,11,11,0.25)", "rgba(11,11,11,0.40)", "rgba(11,11,11,0.60)"]
+      },
+      "map-ground": {
+        "role": "neutral",
+        "displayName": "Map Ground",
+        "scope": "Scoped exception: the system map pane only. Same value in both themes.",
+        "darkValue": "oklch(15% 0.014 265)",
+        "tonalRamp": ["oklch(10% 0.012 265)", "oklch(15% 0.014 265)", "oklch(19% 0.02 265)", "oklch(30% 0.02 265)", "oklch(44% 0.016 265)", "oklch(60% 0.012 265)", "oklch(78% 0.008 265)", "oklch(94% 0.004 265)"]
+      },
+      "map-core": {
+        "role": "primary",
+        "displayName": "Map Core",
+        "scope": "The orchestrator at the centre of the map. Scoped exception.",
+        "darkValue": "oklch(96% 0.02 250)",
+        "tonalRamp": ["oklch(22% 0.02 250)", "oklch(34% 0.03 250)", "oklch(46% 0.04 250)", "oklch(58% 0.04 250)", "oklch(70% 0.04 250)", "oklch(82% 0.03 250)", "oklch(90% 0.03 250)", "oklch(96% 0.02 250)"]
+      },
+      "map-dormant": {
+        "role": "neutral",
+        "displayName": "Map Dormant",
+        "scope": "An unreachable department and any agent known only from run history. Scoped exception.",
+        "darkValue": "oklch(52% 0.008 265)",
+        "tonalRamp": ["oklch(16% 0.008 265)", "oklch(26% 0.008 265)", "oklch(36% 0.008 265)", "oklch(46% 0.008 265)", "oklch(52% 0.008 265)", "oklch(66% 0.008 265)", "oklch(80% 0.006 265)", "oklch(93% 0.004 265)"]
+      },
+      "map-department": {
+        "role": "secondary",
+        "displayName": "Map Department Hue (generated)",
+        "scope": "Not a fixed value. One hue per department, evenly spaced from the id-sorted list and rendered oklch(72% 0.16 <hue>). The component passes --hue; the recipe lives in CSS. Scoped exception.",
+        "darkValue": null,
+        "tonalRamp": ["oklch(72% 0.16 210)", "oklch(72% 0.16 255)", "oklch(72% 0.16 300)", "oklch(72% 0.16 345)", "oklch(72% 0.16 30)", "oklch(72% 0.16 75)", "oklch(72% 0.16 120)", "oklch(72% 0.16 165)"]
       }
     },
     "typographyMeta": {
@@ -115,7 +143,8 @@
       { "name": "fast", "value": "140ms", "purpose": "State feedback: hover, selection." },
       { "name": "slow", "value": "220ms", "purpose": "Structural movement: the detail pane sliding over the rail below 900px." },
       { "name": "breathe", "value": "2.4s opacity 1 -> 0.25 -> 1, infinite", "purpose": "The live dot while a run is open. Reports that the console is polling." },
-      { "name": "sweep", "value": "1.4s linear gradient traverse, infinite", "purpose": "Skeleton loading." }
+      { "name": "sweep", "value": "1.4s linear gradient traverse, infinite", "purpose": "Skeleton loading." },
+      { "name": "map-travel", "value": "translate sender -> receiver, linear, infinite; duration = edge length / 240 units per second, clamped 1.2-3.2s", "purpose": "A dot per handoff edge, running sender to receiver. The one animation in the system that does not report state - a recorded scoped exception. Removed entirely under prefers-reduced-motion, since freezing it would leave a permanent speck at each sender." }
     ],
     "breakpoints": [
       { "name": "console-collapse", "value": "900px", "purpose": "The only media query. Structural: the rail becomes the whole screen and the pane slides in over it as a detail view." }
@@ -200,6 +229,14 @@
       "css": ".ds-payload { background: var(--page, #f9f9f7); border: 1px solid var(--border, rgba(11,11,11,0.1)); border-radius: 6px; padding: 12px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; margin: 0; max-height: 340px; color: var(--text-primary, #0b0b0b); }"
     },
     {
+      "name": "System Map",
+      "kind": "custom",
+      "refersTo": "rail-row",
+      "description": "The scoped dark world. Orchestrator at centre, a hub per department, agents fanned outward. Three tiers of straight edge: trunk, branch, then the handoffs the planner actually made, lightest of all.",
+      "html": "<div class=\"ds-map\"><svg viewBox=\"0 0 400 400\" class=\"ds-map-svg\"><g class=\"ds-map-struct\"><line class=\"trunk\" x1=\"200\" y1=\"200\" x2=\"200\" y2=\"116\" style=\"--h:210\"/><line class=\"trunk\" x1=\"200\" y1=\"200\" x2=\"273\" y2=\"242\" style=\"--h:330\"/><line class=\"trunk\" x1=\"200\" y1=\"200\" x2=\"127\" y2=\"242\" style=\"--h:90\"/><line class=\"branch\" x1=\"200\" y1=\"116\" x2=\"200\" y2=\"72\" style=\"--h:210\"/><line class=\"branch\" x1=\"273\" y1=\"242\" x2=\"311\" y2=\"264\" style=\"--h:330\"/><line class=\"branch\" x1=\"127\" y1=\"242\" x2=\"89\" y2=\"264\" style=\"--h:90\"/></g><g class=\"ds-map-flow\"><path d=\"M 200 72 L 311 264\" style=\"--h:210;--w:1\"/><path d=\"M 311 264 L 89 264\" style=\"--h:330;--w:0.6\"/></g><circle cx=\"200\" cy=\"200\" r=\"7\" class=\"ds-map-core\"/><circle cx=\"200\" cy=\"116\" r=\"9\" class=\"ds-map-hub\" style=\"--h:210\"/><circle cx=\"273\" cy=\"242\" r=\"9\" class=\"ds-map-hub\" style=\"--h:330\"/><circle cx=\"127\" cy=\"242\" r=\"9\" class=\"ds-map-hub\" style=\"--h:90\"/><circle cx=\"200\" cy=\"72\" r=\"6\" class=\"ds-map-node live\" style=\"--h:210\"/><circle cx=\"311\" cy=\"264\" r=\"6\" class=\"ds-map-node\" style=\"--h:330\"/><circle cx=\"89\" cy=\"264\" r=\"6\" class=\"ds-map-node\" style=\"--h:90\"/></svg></div>",
+      "css": ".ds-map { background: radial-gradient(120% 90% at 50% 45%, oklch(19% 0.02 265) 0%, oklch(15% 0.014 265) 55%, oklch(10% 0.012 265) 100%); border-radius: 6px; padding: 8px; } .ds-map-svg { width: 100%; height: auto; display: block; } .ds-map-struct line { stroke: oklch(70% 0.12 var(--h)); } .ds-map-struct line.trunk { stroke-width: 2.5; opacity: 0.55; } .ds-map-struct line.branch { stroke-width: 1.75; opacity: 0.42; } .ds-map-flow path { fill: none; stroke: oklch(78% 0.15 var(--h)); stroke-width: calc(0.75px + var(--w) * 1px); stroke-linecap: round; opacity: calc(0.2 + var(--w) * 0.14); } .ds-map-core { fill: oklch(96% 0.02 250); } .ds-map-hub { fill: oklch(72% 0.16 var(--h)); } .ds-map-node { fill: oklch(74% 0.15 var(--h)); opacity: 0.8; } .ds-map-node.live { fill: oklch(86% 0.15 var(--h)); opacity: 1; animation: ds-map-breathe 2.2s cubic-bezier(0.2,0,0.15,1) infinite; } @keyframes ds-map-breathe { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } } @media (prefers-reduced-motion: reduce) { .ds-map-node.live { animation: none; } }"
+    },
+    {
       "name": "Skeleton",
       "kind": "custom",
       "refersTo": "rail-row",
@@ -232,7 +269,8 @@
       { "name": "The Table Scroll Rule", "body": "Every table is wrapped in an overflow-x: auto container. A wide table scrolls inside its own block; the page body never scrolls sideways.", "section": "layout" },
       { "name": "The Hairline Rule", "body": "Every structural boundary is exactly 1px of alpha-black, never a solid colour and never thicker. The one exception is the decision trail's 2px spine, which is a drawn line rather than a boundary.", "section": "shapes" },
       { "name": "The No-Container Rule", "body": "Content is separated by rules and space, not by boxes. Do not reintroduce a card, panel, or tile to group things — a label plus a rule does the same work without adding a border, a radius, a shadow, and an inset to every group on the screen.", "section": "shapes" },
-      { "name": "The Motion-Means-State Rule", "body": "If an animation is not reporting a state the reader would otherwise have to infer, it does not belong. There are no entrance animations, no scroll choreography, and no page-load sequences — the console loads into a task.", "section": "motion" }
+      { "name": "The Motion-Means-State Rule", "body": "If an animation is not reporting a state the reader would otherwise have to infer, it does not belong. There are no entrance animations, no scroll choreography, and no page-load sequences — the console loads into a task. Exactly one exception exists, named and scoped under Scoped Exceptions: the map's travelling handoff dots. A second one is not free to appear by pointing at the first.", "section": "motion" },
+      { "name": "The Scoped Exception Boundary", "body": "The system map's dark world and generated per-department palette are a recorded exception scoped to .map-stage and nothing else. The four status hues never appear inside it, so the Reserved Signal Rule holds without qualification. A future surface wanting a dark ground or a second accent does not inherit this exception by pointing at it — it argues its own case and gets its own entry, or it uses the system.", "section": "exceptions" }
     ],
     "dos": [
       "Do spend Signal Blue on selection and data only. Its scarcity is the mechanism.",
@@ -255,7 +293,12 @@
       "Don't add a web font. The native system stack is a deliberate choice.",
       "Don't animate anything that isn't reporting state.",
       "Don't hardcode the three current departments or their agent names. The taxonomy comes from the registry and must absorb a fourth department with no visual change.",
-      "Don't read the current flatness as a ban on depth — but if you introduce elevation, introduce a vocabulary, not a one-off shadow."
+      "Don't read the current flatness as a ban on depth — but if you introduce elevation, introduce a vocabulary, not a one-off shadow.",
+      "Don't widen the map's exception past .map-stage.",
+      "Don't hardcode a colour, an icon, or a position per department anywhere in the map — hues come from the id-sorted list and positions from the count, which is what lets a new department appear with no frontend edit.",
+      "Don't let the map's readout strip size itself from its content. Its height is locked and its rows are clamped precisely because the canvas above it takes the leftover space — a growing strip resizes the constellation on every hover.",
+      "Don't treat the map's travelling dots as licence for further decorative motion. They are one named exception to the Motion-Means-State Rule, not a precedent.",
+      "Don't rely on prefers-reduced-motion collapsing a duration to disable an animation. An animation whose frozen frame would be wrong — the travelling dots park at the sender — has to be hidden outright."
     ]
   }
 }

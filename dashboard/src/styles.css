@@ -765,6 +765,446 @@ pre.payload {
   margin: 0;
 }
 
+/* -------------------------------------------------------------------- map
+
+   The one scoped exception to this system: a committed dark world with a colour
+   per department, pinned by the brief. See DESIGN.md > Scoped Exceptions. The
+   exception stops at .map-stage -- the legend below it is ordinary console chrome,
+   and none of the four reserved status hues appear inside the map at all.
+
+   Every static colour is a token here. The only value the component sets is each
+   department's --hue, which is data; the colour recipe stays in this file. */
+
+.pane-inner.is-map {
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.map-stage {
+  --map-ground-lift: oklch(19% 0.02 265);
+  --map-ground: oklch(15% 0.014 265);
+  --map-ground-deep: oklch(10% 0.012 265);
+  --map-core: oklch(96% 0.02 250);
+  --map-core-ring: oklch(88% 0.04 250);
+  --map-label: oklch(93% 0.008 250);
+  --map-label-dim: oklch(74% 0.008 250);
+  --map-label-agent: oklch(85% 0.008 250);
+  --map-dormant: oklch(52% 0.008 265);
+  --map-dormant-text: oklch(66% 0.008 265);
+  --map-star: oklch(99% 0 0);
+  --map-star-alt: oklch(88% 0.03 250);
+
+  /* The department colour recipe. --hue arrives from the data. */
+  --map-hue: oklch(72% 0.16 var(--hue));
+  --map-hue-soft: oklch(70% 0.13 var(--hue) / 0.32);
+  --map-hue-bright: oklch(86% 0.15 var(--hue));
+
+  position: relative;
+  flex: 1;
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 6px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 45%, oklch(19% 0.02 265) 0%, var(--map-ground) 55%, var(--map-ground-deep) 100%);
+}
+
+/* Square and centred, so the HTML label layer's percentages line up exactly with the
+   SVG's user-unit coordinates -- preserveAspectRatio has nothing left to letterbox. */
+.map-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  aspect-ratio: 1;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+}
+
+.map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Static by choice. The reference is a still field, and a continuously rotating
+   260-circle group repaints forever for no state. The live pulse carries motion. */
+.map-stars circle {
+  fill: var(--map-star);
+}
+
+.map-stars-b circle {
+  fill: var(--map-star-alt);
+}
+
+/* Three tiers of edge, all straight, weighted so the structure leads and the flow recedes:
+   trunk (orchestrator -> department) > branch (department -> agent) > flow (agent -> agent).
+   The tree is what gives the constellation its shape; the handoffs are what happened
+   inside it. */
+.map-structural line {
+  stroke: oklch(70% 0.12 var(--hue));
+}
+
+.map-structural line.trunk {
+  stroke-width: 2.5;
+  opacity: 0.55;
+}
+
+.map-structural line.branch {
+  stroke-width: 1.75;
+  opacity: 0.42;
+}
+
+.map-structural line.down {
+  stroke-dasharray: 3 6;
+  opacity: 0.18;
+}
+
+.map-flow path {
+  fill: none;
+  stroke: oklch(78% 0.15 var(--hue));
+  stroke-width: calc(0.75px + var(--w) * 1px);
+  stroke-linecap: round;
+  opacity: calc(0.2 + var(--w) * 0.14);
+  transition: opacity var(--fast) var(--ease);
+}
+
+/* Below a normal flow edge on purpose: a handoff the schema refused should never read as
+   more substantial than one that went through. */
+.map-flow path.rejected {
+  stroke-dasharray: 5 7;
+  opacity: 0.16;
+}
+
+/* Live and hovered still punch hard -- the resting field is quiet so these can carry. */
+.map-flow path.live {
+  opacity: 0.95;
+}
+
+.map-flow path.muted {
+  opacity: 0.06;
+}
+
+.map-flow path.hot {
+  opacity: 1;
+  stroke-width: calc(2px + var(--w) * 1px);
+}
+
+/* A dot per handoff, running sender to receiver.
+
+   This one animates at rest and so does not report state -- a recorded exception, see
+   DESIGN.md > Scoped Exceptions. Duration and delay arrive per edge from the component:
+   duration scales with the edge's length so every dot moves at the same speed.
+
+   Straight edges mean a plain translate does the job; offset-path would buy path-following
+   we do not need and is far younger than CSS transforms on SVG. transform-box pins the
+   translate to viewBox units, and translate is origin-independent so transform-origin
+   needs no thought. */
+.map-flow-dots circle {
+  fill: oklch(90% 0.16 var(--hue));
+  transform-box: view-box;
+  animation-name: map-travel;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.map-flow-dots circle.muted {
+  opacity: 0.08;
+}
+
+@keyframes map-travel {
+  from {
+    transform: translate(var(--x1), var(--y1));
+    opacity: 0;
+  }
+  12%,
+  88% {
+    opacity: 0.9;
+  }
+  to {
+    transform: translate(var(--x2), var(--y2));
+    opacity: 0;
+  }
+}
+
+/* Hit targets only. A chord's visible stroke is 1-3.4px, which no pointer can reliably
+   find, so hover rides on a transparent 16px stroke instead. */
+.map-flow-hit path {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.map-core .halo {
+  fill: url(#core-halo);
+}
+
+.map-core .core {
+  fill: var(--map-core);
+}
+
+.map-core .ring {
+  fill: none;
+  stroke: var(--map-core-ring);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.map-core.live .core {
+  animation: map-pulse-core 2.2s var(--ease) infinite;
+}
+
+#core-halo .halo-in {
+  stop-color: oklch(92% 0.03 250);
+  stop-opacity: 0.8;
+}
+#core-halo .halo-mid {
+  stop-color: oklch(80% 0.06 250);
+  stop-opacity: 0.2;
+}
+#core-halo .halo-out {
+  stop-color: oklch(70% 0.08 250);
+  stop-opacity: 0;
+}
+
+.map-hub,
+.map-node {
+  transition: opacity var(--fast) var(--ease);
+}
+
+.map-hub.dimmed,
+.map-node.dimmed {
+  opacity: 0.2;
+}
+
+.map-hub .hub {
+  fill: var(--map-hue);
+}
+
+.map-hub .ring {
+  fill: none;
+  stroke: oklch(70% 0.14 var(--hue));
+  stroke-width: 1;
+  opacity: 0.75;
+}
+
+.map-hub.down .hub {
+  fill: var(--map-dormant);
+}
+
+.map-hub.down .ring {
+  opacity: 0.28;
+}
+
+.map-node .node {
+  fill: oklch(74% 0.15 var(--hue));
+  opacity: 0.8;
+}
+
+.map-node.live .node {
+  fill: var(--map-hue-bright);
+  opacity: 1;
+}
+
+.map-node.historical .node {
+  fill: var(--map-dormant);
+  opacity: 0.7;
+}
+
+.map-node .pulse {
+  fill: var(--map-hue-soft);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: map-pulse 2.2s var(--ease) infinite;
+}
+
+@keyframes map-pulse {
+  0%,
+  100% {
+    transform: scale(0.55);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 0.1;
+  }
+}
+
+@keyframes map-pulse-core {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Labels are HTML over the SVG, so they stay on the documented type ramp at every
+   pane width instead of shrinking with the viewBox. */
+.map-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.map-labels > div {
+  position: absolute;
+  white-space: nowrap;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.map-dept-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--map-label);
+}
+
+.map-dept-label .sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--map-dormant-text);
+}
+
+.map-dept-label.down {
+  color: var(--map-dormant-text);
+}
+
+/* Hidden until its node is hovered. Seven nodes do not need four permanent captions, and
+   the names are one pointer-move away. Rendered-but-transparent rather than unmounted, so
+   the reveal can fade and nothing reflows. */
+.map-agent-label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--map-label-agent);
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.map-agent-label.shown {
+  opacity: 1;
+}
+
+.map-agent-label.live {
+  color: oklch(90% 0.09 var(--hue, 250));
+}
+
+.map-agent-label.historical {
+  color: var(--map-dormant-text);
+}
+
+.map-labels > div.dimmed {
+  opacity: 0.2;
+}
+
+/* Locked height, deliberately.
+
+   .map-canvas above is `flex: 1` with `aspect-ratio: 1`, so the map is sized by whatever
+   height is left over. If this strip grew with its text the constellation would resize on
+   every hover -- and it would, because the registry descriptions it prints run to 189
+   characters against a ~78-character resting line. So: a fixed box, one nowrap status row,
+   and a detail row clamped to two lines. Nothing said here can move the map.
+
+   78px = 10px padding x2 + one 18px status line + 4px gap + two 18px detail lines. */
+.map-readout {
+  flex: none;
+  height: 78px;
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid oklch(100% 0 0 / 0.08);
+  background: oklch(100% 0 0 / 0.02);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 4px;
+  align-content: start;
+  overflow: hidden;
+}
+
+.map-readout-status {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--map-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-readout-detail {
+  margin: 0;
+  font-size: 12px;
+  color: var(--map-label-dim);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Below the stage: ordinary console chrome, on the console's own surface. */
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.map-chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--fast) var(--ease);
+}
+
+.map-chip:hover {
+  color: var(--text-primary);
+}
+
+.map-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: oklch(62% 0.16 var(--hue));
+  flex: none;
+}
+
+.map-chip.down {
+  color: var(--muted);
+}
+
+.map-chip.down .map-chip-dot {
+  background: var(--baseline);
+}
+
+.map-chip-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
 /* ------------------------------------------------------------- responsive */
 
 @media (max-width: 900px) {
@@ -818,5 +1258,11 @@ pre.payload {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* Collapsing the duration would not remove these -- it would park every dot at its
+     sender end as a permanent speck on each edge. They have to go entirely. */
+  .map-flow-dots {
+    display: none;
   }
 }

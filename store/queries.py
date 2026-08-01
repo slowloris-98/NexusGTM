@@ -165,7 +165,34 @@ def list_orchestrations(conn: sqlite3.Connection, limit: int = 100) -> list[dict
         "FROM orchestrations o ORDER BY o.started_at DESC LIMIT ?",
         (limit,),
     ).fetchall()
-    return [_row(r, ("final_result",)) for r in rows]
+    result = [_row(r, ("final_result",)) for r in rows]
+
+    # The ordered agent path per orchestration, so a reader can see the route the
+    # planner actually took -- the control plane draws its agent graph from the
+    # handoffs these paths imply, rather than from a declared topology that does
+    # not exist (agents never call each other).
+    #
+    # One extra statement for the whole page rather than one per orchestration,
+    # and ordering comes from ORDER BY step_no rather than from GROUP_CONCAT,
+    # whose ordering is not guaranteed. The department travels with each step so
+    # two departments exposing the same bare agent name stay distinguishable.
+    ids = [row["id"] for row in result]
+    paths: dict[str, list[dict]] = {}
+    if ids:
+        runs = conn.execute(
+            "SELECT orchestration_id, department, agent, status FROM runs "
+            f"WHERE orchestration_id IN ({','.join('?' * len(ids))}) "
+            "ORDER BY orchestration_id, step_no",
+            ids,
+        ).fetchall()
+        for r in runs:
+            paths.setdefault(r["orchestration_id"], []).append(
+                {"department": r["department"], "agent": r["agent"], "status": r["status"]}
+            )
+    for row in result:
+        row["agent_path"] = paths.get(row["id"], [])
+
+    return result
 
 
 def get_orchestration(conn: sqlite3.Connection, orchestration_id: str) -> dict | None:

@@ -1,3 +1,10 @@
+/** One agent invocation in the order the planner decided it. */
+export type PathStep = {
+  department: string;
+  agent: string;
+  status: string;
+};
+
 export type Orchestration = {
   id: string;
   crm_reference_id: string;
@@ -9,6 +16,12 @@ export type Orchestration = {
   total_cost_usd: number;
   step_count: number;
   current_stage: string | null;
+  /**
+   * The route this orchestration actually took, ordered by step. The map derives its
+   * agent-to-agent edges from these, because agents never call each other and there is
+   * no declared topology to read.
+   */
+  agent_path: PathStep[];
 };
 
 export type Run = {
