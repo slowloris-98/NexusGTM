@@ -315,12 +315,22 @@ A two-column console filling the viewport, with a fixed bar across the top.
 - **System bar:** 46px, full width, Paper ground, hairline underneath.
 - **Rail:** fixed 340px, Paper ground, hairline on the right. It owns its own scroll; the
   filter field is pinned above it and never scrolls away.
-- **Pane:** fluid, Card ground, its own scroll, content held to a 860px measure with
-  `26px 28px 72px` of padding.
+- **Pane:** fluid, Card ground, its own scroll, uncapped, with `26px 28px 72px` of padding.
+  There is no outer measure: a fixed one left the right half of a wide monitor empty. The
+  measure lives on the *content* instead — 46ch on an answer, 62ch on a gloss, 68ch on a
+  rationale — so prose stays readable while tables, charts and the run graph take the width.
 
 Inside the pane, content is a vertical stack of blocks separated by a Grid Rule with `22px`
 of clearance on each side. There is no card, no panel, and no nested container — a block is
 a label, its content, and a rule.
+
+**Spread** is the one exception to the stack, and the only nested container in the system.
+It pairs two blocks that answer the same question two ways — Health beside Needs you, a
+cost breakdown beside its trend, the planner's rationale beside the graph of the route it
+produced. Below `1240px` it is inert and the blocks stack as they always do. Above it, the
+pair becomes one band: the band takes over the horizontal rule so both columns start on the
+same line, and the divider between them is the same Grid Rule stood on end, `36px` either
+side. A spread is never three columns and never nests.
 
 **Density** is compact but not cramped: `8px 14px` rail rows, `10px 14px` table cells, a
 constant 1.5 line height.
@@ -332,11 +342,12 @@ Spacing steps in use: `4 · 6 · 8 · 12 · 14 · 18 · 22 · 26 · 72`.
 **The Fixed Chassis Rule.** The bar and the rail never change with selection. Only the pane
 swaps. A reader who has found a row keeps their place in the list no matter what they open.
 
-**The Structural Breakpoint Rule.** There is exactly one media query (`900px`), and it
-exists to change *structure*, not size: below it the rail becomes the whole screen and the
-pane slides in over it as a detail view with its own back control. Everything else
-responsive is intrinsic — `minmax(0, 1fr)` tracks, `flex-wrap`, `overflow-x` containers.
-Reach for intrinsic sizing before adding a second query.
+**The Structural Breakpoint Rule.** There are exactly two media queries, and each exists to
+change *structure*, not size. At `900px` the rail becomes the whole screen and the pane
+slides in over it as a detail view with its own back control. At `1240px` a Spread turns
+from a stack into a pair of columns. Everything else responsive is intrinsic —
+`minmax(0, 1fr)` tracks, `flex-wrap`, `overflow-x` containers, `width: min(100%, …)` on the
+run graph. Reach for intrinsic sizing before adding a third query.
 
 **The Table Scroll Rule.** Every table is wrapped in an `overflow-x: auto` container. A wide
 table scrolls inside its own block; the page body never scrolls sideways.
@@ -487,12 +498,19 @@ recede.
 | branch | department → agent | 1.75 | 0.42 |
 | flow | agent → agent | 0.75–1.75 | 0.20–0.34 |
 
-Flow edges join agents the planner actually handed off between, and their width and opacity
-scale with how often that handoff occurred. A flow edge whose every observation was rejected
-by the target's schema draws dashed and dimmer still — below a successful handoff on purpose,
-because a route the schema refused should never read as more substantial than one that went
-through. Live and hovered edges jump to near-full opacity; the quiet resting field is what
-lets them carry.
+**Flow edges are live only.** They are drawn while a lead is actually moving between two
+agents, accumulating hop by hop as a run progresses, then fade out over six seconds once the
+run finishes. With nothing in flight the map is the bare tree — that is correct, not broken,
+and the readout says so rather than leaving an empty field to be misread. Width and opacity
+scale with how many leads are on that hop at once, so the encoding stays meaningful the
+moment two runs overlap.
+
+Only a live edge carries a travelling dot; a fading one has nothing moving along it, so the
+line fades on its own. A flow edge whose every traversal was rejected by the target's schema
+draws dashed and dimmer still — below a successful handoff on purpose, because a route the
+schema refused should never read as more substantial than one that went through. Every state
+override multiplies the fade back in; a flat opacity would pin an edge and it would never
+disappear.
 
 A handoff between two diametrically opposite agents runs through the middle. That is fine:
 the flow layer paints before the orchestrator, whose core and halo cover it.
@@ -500,10 +518,17 @@ the flow layer paints before the orchestrator, whose core and halo cover it.
 Node sizes are geometry, not style: they live beside the positions in
 [layout.ts](dashboard/src/graph/layout.ts) and each node carries its own radius, because an
 agent's size depends on how much room its neighbours leave. A department hub renders about
-28px across and an agent about 19px, holding a 1.5:1 ratio. Two clamps keep that safe as the
-system grows — the agent radius is capped against the spacing between adjacent agents, and
-the fan width is capped against the department count. Neither engages at three departments;
-at seven agents in one department the radius eases down rather than letting nodes collide.
+23px across and an agent about 15px, holding an exact 1.5:1 ratio.
+
+**A hub is the same size as the orchestrator** — identical disc and identical ring. The
+centre reads as the centre through its halo and its position, not by being bigger, so a
+department is drawn as the orchestrator's peer rather than its subordinate. Anything that
+makes hubs larger again is undoing that on purpose.
+
+Two clamps keep the sizes safe as the system grows — the agent radius is capped against the
+spacing between adjacent agents, and the fan width is capped against the department count.
+Neither engages at three departments; at eight agents in one department the radius eases down
+rather than letting nodes collide.
 
 Nothing about the composition is per-department: hues are generated from the id-sorted
 department list, positions from the count. A department added to `departments.yaml` takes
@@ -513,8 +538,12 @@ ones would make the extensibility second-class.
 
 Labels are HTML positioned over the SVG rather than `<text>` inside it, so they stay on the
 type ramp at every pane width instead of scaling down with the viewBox. Department names are
-always visible; **agent names appear only while their node is hovered**, fading in rather
-than popping — seven nodes do not need four permanent captions. The labels layer is
+always visible; **an agent name appears while its own node is hovered, or while its
+department's hub is** — hover a hub and its branch names itself — fading in rather than
+popping, since seven nodes do not need four permanent captions. Agent labels are governed
+solely by `.map-agent-label[.shown]`; the dimming rule is scoped to department labels,
+because a selector broad enough to dim an agent label also overrides its hidden default and
+makes it *appear*. The labels layer is
 `aria-hidden`, so the SVG `<desc>` is the accessible source and names every department with
 its full agent roster, including agents that appear in no handoff.
 
@@ -544,10 +573,11 @@ Two durations and one easing curve: `140ms` for state feedback (hover, selection
 `220ms` for structural movement (the mobile pane sliding in), both on
 `cubic-bezier(0.2, 0, 0.15, 1)`.
 
-Four things animate. Three report state: the live dot breathing while a run is open, the
-skeleton sweep while data is loading, and the detail pane sliding over the rail on narrow
-screens. The fourth — the map's travelling handoff dots — does not, and is a recorded
-exception rather than a quiet breach; see Scoped Exceptions. Everything else changes
+Six things animate, and every one reports state: the live dot breathing while a run is open,
+the skeleton sweep while data is loading, the detail pane sliding over the rail on narrow
+screens, the map's dots travelling a handoff while a lead is on it, a handoff edge fading
+out over six seconds once its run has finished, and the run graph's single travelling head
+walking that one run's hops in the order the planner chose them. Everything else changes
 instantly.
 
 `prefers-reduced-motion: reduce` collapses every duration to `0.01ms`. Note that collapsing a
@@ -559,9 +589,8 @@ under that query rather than merely stopped.
 
 **The Motion-Means-State Rule.** If an animation is not reporting a state the reader would
 otherwise have to infer, it does not belong. There are no entrance animations, no scroll
-choreography, and no page-load sequences — the console loads into a task. Exactly one
-exception exists, named and scoped under Scoped Exceptions; a second one is not free to
-appear by pointing at the first.
+choreography, and no page-load sequences — the console loads into a task. The rule holds
+with no exceptions anywhere in the system, including inside the map's scoped dark world.
 
 ## Do's and Don'ts
 
@@ -601,6 +630,17 @@ appear by pointing at the first.
 - **Don't** let the map's readout strip size itself from its content. Its height is locked
   and its rows are clamped precisely because the canvas above it takes the leftover space —
   a growing strip resizes the constellation on every hover.
+- **Don't** paint anything meant to cover the map's *ground* inside the square canvas. The
+  canvas is a centred square and the stage is full width, so a viewBox-drawn background
+  leaves the ground bare either side of the constellation — around 39% of it on a typical
+  desktop stage, and worse as the window widens. Ground layers go on `.map-stage`, positioned
+  in percentages.
+- **Don't** build a hue-derived colour as a custom property on a container. `--hue` is set
+  per element, and a `var()` inside a custom property is substituted on the element that
+  *declares* it — so `--tint: oklch(70% 0.1 var(--hue))` written on `.map-stage` resolves
+  against a `--hue` that element does not have, computes to guaranteed-invalid, and paints
+  every downstream `fill` **black**. It is valid CSS and nothing warns. Write the `oklch()`
+  directly at its point of use, where `--hue` is genuinely inherited.
 
 ## Scoped Exceptions
 
@@ -608,11 +648,17 @@ One surface departs from this system on purpose. Recording it here keeps the res
 system honest — an undocumented departure is drift, and the next person cannot tell which
 of the two is the mistake.
 
-### The system map's dark world
+### The constellation's dark world
 
 **Scope.** `.map-stage` in [dashboard/src/styles.css](dashboard/src/styles.css) and nothing
-else. The pane heading, the legend chips beneath it, the rail, and the system bar are all
-ordinary console chrome on the console's own surfaces.
+else. That element now has two hosts: the standalone Map pane, and the per-run graph at the
+bottom of a lead's detail (`.map-stage.is-run`, which differs from the map's stage in sizing
+alone — it states its own square box instead of taking the leftover height of a flex pane).
+A second host does not widen what the exception *permits*: the same tokens, the same
+generated hues, and the same rules apply inside both stages. Everything outside either one
+is ordinary console chrome on the console's own surfaces — the pane headings, the `<Block>`
+sections and runs table surrounding the run graph, the legend chips beneath the map, the
+rail, and the system bar.
 
 **Why.** The user pinned this aesthetic with a reference image. The map is a diagram of a
 running machine rather than a reading surface, and a constellation of coloured department
@@ -626,14 +672,12 @@ branches on a dark field is what makes its structure legible at a glance.
   id-sorted list, rendered `oklch(72% 0.16 <hue>)`. This is the one place a second, third,
   and fourth accent exist. They are a data encoding, not decoration: the hue identifies
   which department a node belongs to and carries no other meaning.
-- A static starfield, the only purely decorative *static* element in the entire system.
-- **Continuous travelling dots on every handoff edge**, running sender to receiver. These
-  animate at rest, so by the Motion-Means-State Rule's own definition they are decoration.
-  They earn their place by making direction legible — a straight line between two agents
-  otherwise cannot say which way the handoff went — and they stay partly informational
-  because a wholly-rejected handoff gets no dot: nothing flowed, so nothing travels. Every
-  dot moves at one speed (duration derives from edge length), staggered deterministically so
-  they neither fire in lockstep nor reshuffle between polls, and capped at 24 edges.
+- A static starfield, the only purely decorative element in the entire system. It spans the
+  whole stage, not the square canvas: it is painted on a viewBox-less layer whose stars are
+  positioned in percentages, so coverage stays even at any aspect ratio while the dots stay
+  round. Inside the square SVG it would leave the ground bare either side of the
+  constellation — around 39% of it on a typical desktop stage — because the canvas is a
+  centred square and the stage is full width.
 
 **What it does not change.**
 
@@ -641,10 +685,15 @@ branches on a dark field is what makes its structure legible at a glance.
   in the map at all. The Reserved Signal Rule holds without qualification.
 - Signal Blue is not used as an accent inside the map; the department hues replace it there.
 - The type ramp holds. Labels are HTML at documented steps, not scaled SVG text.
-- The node pulse still means an agent is working and the core pulse still means the planner
-  is choosing; the travelling dots above are the *only* motion here that reports nothing.
-- The starfield stays deliberately **static** — a continuously animating 260-circle field
-  would repaint forever to report nothing, and one motion exception is the budget.
+- The node pulse means an agent is working, the core pulse means the planner is choosing, a
+  travelling dot means a lead is on that hop, and a fading edge means its run just finished.
+  Every one reports state; the Motion-Means-State Rule needs no exception here.
+- In the run graph a single head walks that one run's hops in sequence and loops, because
+  order is the one thing a still picture of a finished run cannot carry. It is a replay of a
+  route that was actually taken, not decoration, so the rule needs no exception there either.
+- The starfield stays deliberately **static** — a continuously animating 420-circle field
+  would repaint forever to report nothing. It is also seeded, so it cannot reshuffle and
+  twinkle on the 4-second poll.
 - `prefers-reduced-motion` still removes every animation, dots included.
 
 **The boundary is the rule.** A future surface wanting a dark ground or a second accent does

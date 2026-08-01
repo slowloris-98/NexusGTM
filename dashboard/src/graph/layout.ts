@@ -31,10 +31,12 @@ export const NODE = {
   core: 18,
   coreRing: 28,
   coreHalo: 120,
-  hub: 22,
-  hubRing: 32,
-  agent: 15,
-  agentPulse: 34,
+  /** Deliberately identical to the core: a department is the orchestrator's peer in size,
+      and the centre reads as the centre by its halo and its position, not by mass. */
+  hub: 18,
+  hubRing: 28,
+  agent: 12,
+  agentPulse: 27,
   /** Clear space between an agent node's edge and the top of its label. */
   labelGap: 16,
 } as const;
@@ -47,6 +49,17 @@ export const NODE = {
  */
 const fanFor = (departments: number) =>
   Math.min((22 * Math.PI) / 180, ((2 * Math.PI) / Math.max(1, departments)) * 0.35);
+
+/**
+ * Anything carrying a route.
+ *
+ * Widened from Orchestration because a single run's detail has no `agent_path` -- the
+ * detail endpoint does not compute one -- but its runs derive the same list. The functions
+ * that take these read nothing else, and Orchestration still satisfies them structurally,
+ * so the map's call sites are unaffected.
+ */
+export type PathBearing = { agent_path?: PathStep[] | null };
+export type RunLike = PathBearing & { status: string };
 
 export type NodeKind = "orchestrator" | "department" | "agent";
 
@@ -102,11 +115,16 @@ export type FlowEdge = {
   /** Distance in viewBox units, so the dot can move at a constant speed. */
   length: number;
   hue: number;
+  /** Contributing orchestrations -- how many leads are on this hop right now. */
   count: number;
   /** Handoffs whose target agent rejected the payload and forced a re-plan. */
   rejected: number;
   /** 0..1 against the busiest edge, for stroke weight and opacity. */
   weight: number;
+  /** At least one contributing run is still going; false means it is fading out. */
+  liveNow: boolean;
+  /** Latest finish among contributors -- the fade clock. Null while any is still live. */
+  lastFinishedAt: string | null;
   fromLabel: string;
   toLabel: string;
 };
@@ -139,7 +157,7 @@ export function departmentHues(ids: string[]): Map<string, number> {
 }
 
 /** Agents each department has been seen using, even if its server is down right now. */
-function historicalAgents(orchestrations: Orchestration[]): Map<string, Set<string>> {
+function historicalAgents(orchestrations: readonly PathBearing[]): Map<string, Set<string>> {
   const seen = new Map<string, Set<string>>();
   for (const o of orchestrations) {
     for (const step of o.agent_path ?? []) {
@@ -152,7 +170,7 @@ function historicalAgents(orchestrations: Orchestration[]): Map<string, Set<stri
 
 export function buildGraph(
   depts: Departments | null,
-  orchestrations: Orchestration[],
+  orchestrations: readonly PathBearing[],
 ): Graph {
   const live = depts?.departments ?? [];
   const down = depts?.unreachable ?? [];
@@ -312,11 +330,46 @@ export function buildGraph(
  * returned. Agents never call each other, so there is no declared topology to read -- an
  * edge exists because that transition happened.
  */
+/** How long a finished run's path stays drawn, fading, before it goes. */
+export const LINGER_MS = 6000;
+
+/**
+ * The orchestrations the map draws flow for: those still running, plus those that finished
+ * recently enough to still be fading out. Everything else contributes nothing -- with
+ * nothing in flight the map is the bare tree, which is the point.
+ *
+ * Pure, and takes `now` rather than reading the clock, so it is testable and so the layout
+ * module stays free of time.
+ */
+export function activeForMap(
+  orchestrations: Orchestration[],
+  now: number,
+  linger = LINGER_MS,
+): Orchestration[] {
+  return orchestrations.filter((o) => {
+    if (o.status === "running") return true;
+    if (!o.finished_at) return false;
+    const age = now - new Date(o.finished_at).getTime();
+    return age >= 0 && age < linger;
+  });
+}
+
 export function flowEdges(graph: Graph, orchestrations: Orchestration[]): FlowEdge[] {
-  const tally = new Map<string, { from: string; to: string; count: number; rejected: number }>();
+  const tally = new Map<
+    string,
+    {
+      from: string;
+      to: string;
+      count: number;
+      rejected: number;
+      liveNow: boolean;
+      lastFinishedAt: string | null;
+    }
+  >();
 
   for (const o of orchestrations) {
     const path: PathStep[] = o.agent_path ?? [];
+    const running = o.status === "running";
     for (let i = 0; i < path.length - 1; i++) {
       const a = path[i];
       const b = path[i + 1];
@@ -324,10 +377,22 @@ export function flowEdges(graph: Graph, orchestrations: Orchestration[]): FlowEd
       const to = agentKey(b.department, b.agent);
       if (from === to) continue;
       const id = `${from}->${to}`;
-      const entry = tally.get(id) ?? { from, to, count: 0, rejected: 0 };
+      const entry =
+        tally.get(id) ??
+        { from, to, count: 0, rejected: 0, liveNow: false, lastFinishedAt: null };
       entry.count += 1;
       // The planner picked this agent and its schema refused, forcing a re-plan.
       if (b.status === "invalid_input") entry.rejected += 1;
+      // One live contributor keeps the whole edge live; otherwise the newest finish
+      // among the contributors is what the fade counts from.
+      if (running) {
+        entry.liveNow = true;
+        entry.lastFinishedAt = null;
+      } else if (!entry.liveNow && o.finished_at) {
+        if (!entry.lastFinishedAt || o.finished_at > entry.lastFinishedAt) {
+          entry.lastFinishedAt = o.finished_at;
+        }
+      }
       tally.set(id, entry);
     }
   }
@@ -359,12 +424,125 @@ export function flowEdges(graph: Graph, orchestrations: Orchestration[]): FlowEd
       count: entry.count,
       rejected: entry.rejected,
       weight: entry.count / busiest,
+      liveNow: entry.liveNow,
+      lastFinishedAt: entry.lastFinishedAt,
       fromLabel: a.label,
       toLabel: b.label,
     });
   }
 
   return edges.sort((x, y) => x.count - y.count);
+}
+
+/**
+ * One handoff, at its position in a single run's route.
+ *
+ * Deliberately not a FlowEdge. A FlowEdge is a *tally*: it dedupes by endpoint pair and
+ * drops self-loops, both right for the aggregate map and both wrong here. A run that went
+ * A -> B -> A -> B took four steps, not one edge with a count of 2, and the planner picking
+ * the same agent twice is a fact about that run -- it is what halted_loop is watching for.
+ */
+export type Hop = {
+  /** Position-qualified, so a repeated hop is two distinct elements rather than one. */
+  id: string;
+  /** 0-based position in the route. The relay's cursor indexes this. */
+  index: number;
+  /** step_no of the *receiving* run: what this hop delivered into. 1-based, as the DB is. */
+  stepNo: number;
+  from: string;
+  to: string;
+  d: string;
+  /** Endpoints for the travelling head. On a self-loop these are the arc's two anchors,
+      not the node centre, so a plain translate still has somewhere to go. */
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  /** Chord distance in viewBox units -- arcs included -- so every hop travels at one speed. */
+  length: number;
+  hue: number;
+  /** The receiving run's status. `invalid_input` means the target's schema refused it. */
+  status: string;
+  selfLoop: boolean;
+  fromLabel: string;
+  toLabel: string;
+};
+
+/** Radius of the little arc a self-loop is drawn as. Sits just inside the agent's pulse. */
+const LOOP_R = NODE.agentPulse * 0.8;
+
+/**
+ * A single run's route, in the order the planner chose it.
+ *
+ * The counterpart to `flowEdges` for one orchestration rather than all of them: no tally,
+ * no dedupe, and no sort -- the output order *is* the path order, which is the whole point
+ * of drawing one run rather than the system.
+ */
+export function runHops(graph: Graph, path: readonly PathStep[]): Hop[] {
+  const hops: Hop[] = [];
+
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = graph.byKey.get(agentKey(path[i].department, path[i].agent));
+    const b = graph.byKey.get(agentKey(path[i + 1].department, path[i + 1].agent));
+
+    // An agent a reachable department no longer registers has no node to attach to. Skip
+    // the hop rather than throw or invent a position: the chain visibly breaks, and the
+    // caller's description is built from the path, so the full route survives in words.
+    if (!a || !b) continue;
+
+    const selfLoop = a.key === b.key;
+    let d: string;
+    let x1 = a.x;
+    let y1 = a.y;
+    let x2 = b.x;
+    let y2 = b.y;
+
+    if (selfLoop) {
+      // A little arc bulging radially outward, away from the department's branch, so it
+      // cannot collide with the trunk it hangs off. The head chords straight across it,
+      // which reads as a dwell at the node -- which is what coming back here means.
+      const vx = a.x - CENTRE;
+      const vy = a.y - CENTRE;
+      const mag = Math.hypot(vx, vy) || 1;
+      const ux = vx / mag;
+      const uy = vy / mag;
+      const px = -uy;
+      const py = ux;
+
+      x1 = a.x + px * a.r;
+      y1 = a.y + py * a.r;
+      x2 = a.x - px * a.r;
+      y2 = a.y - py * a.r;
+      // large-arc, anticlockwise: of the four arcs these two anchors admit, this is the
+      // one that bulges along +u. The chirality holds at every angle because `p` is always
+      // the same rotation of `u`.
+      d = `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${LOOP_R.toFixed(1)} ${LOOP_R.toFixed(1)} 0 1 0 ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+    } else {
+      d = `M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+    }
+
+    hops.push({
+      id: `h:${i}:${a.key}->${b.key}`,
+      index: i,
+      // The path is 1-based in the store, and a hop is named for what it delivered into.
+      stepNo: i + 2,
+      from: a.key,
+      to: b.key,
+      d,
+      x1,
+      y1,
+      x2,
+      y2,
+      length: Math.hypot(x2 - x1, y2 - y1),
+      hue: a.hue ?? 210,
+      status: path[i + 1].status,
+      selfLoop,
+      fromLabel: a.label,
+      toLabel: b.label,
+    });
+  }
+
+  return hops;
 }
 
 /**
@@ -375,7 +553,7 @@ export function flowEdges(graph: Graph, orchestrations: Orchestration[]): FlowEd
  * expose the same bare agent name. An empty path means no agent has been invoked yet and
  * the planner is still choosing, which is the centre's own live state.
  */
-export function liveKeys(orchestrations: Orchestration[]): {
+export function liveKeys(orchestrations: readonly RunLike[]): {
   nodes: Set<string>;
   planning: boolean;
 } {
@@ -397,6 +575,16 @@ export function liveKeys(orchestrations: Orchestration[]): {
 }
 
 /** Deterministic starfield, seeded so it never reshuffles on re-render. */
+/**
+ * A seeded, static field of stars for the map's ground.
+ *
+ * `x` and `y` come back in 0..SIZE but are consumed as *percentages* of it, because the
+ * field is painted on a viewBox-less layer covering the whole stage rather than inside the
+ * square canvas -- percentages spread evenly at any aspect ratio. `r` is therefore CSS px,
+ * not viewBox units, so the dots stay round and stop scaling with the pane's height.
+ *
+ * Seeded on purpose: a field that reshuffled on every 4s poll would twinkle.
+ */
 export function starfield(count: number, seed = 9): { x: number; y: number; r: number; o: number }[] {
   let s = seed;
   const rand = () => {
@@ -406,7 +594,9 @@ export function starfield(count: number, seed = 9): { x: number; y: number; r: n
   return Array.from({ length: count }, () => ({
     x: rand() * SIZE,
     y: rand() * SIZE,
-    r: 0.6 + rand() * 1.1,
+    // px. Matches how the old viewBox units used to land after the canvas scale, so the
+    // apparent size is unchanged.
+    r: 0.4 + rand() * 0.75,
     o: 0.15 + rand() * 0.5,
   }));
 }

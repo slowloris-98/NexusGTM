@@ -1,19 +1,13 @@
 
-
-1. UI should have graph representation
+1. playbook should not just be one flow, but multiple flows accross different department.
 2. Integrate clay (lead fetching agent in revops)
 3. Integrate hubspot (crm)
 4. Add more orchestration runs from seed.
-5. Each run should have a brief single sentence about what was this run, a lead
 6. json section should be collasable and fields like reason and score should be directly shown.
 7. parallel execution or multiple orchestrations
 8. light mode
-9. each run should have its own graph
 
 Graph:
 
-4. node highlighting during process should be a different color
-5. hovering on a node should have some effect (edges already have some)
-6. background stars are only in a specific part of the map area (extend to all or remove completely)
-8. animation in the center orchestrator, like a group of stars moving together.
-9. edge animation should change during the live run. 
+8. animation in the center orchestrator, like a group of starSs moving together.
+12. graph should feel like a living creature

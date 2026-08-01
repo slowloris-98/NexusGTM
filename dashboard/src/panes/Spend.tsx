@@ -11,7 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { api, plural, usd } from "../api";
-import { Block, ChartTooltip, useAsync } from "../components";
+import { Block, ChartTooltip, Spread, useAsync } from "../components";
 import { readAgent, readOutcome } from "../vocabulary";
 
 const AXIS = { fill: "var(--muted)", fontSize: 11 };
@@ -97,116 +97,136 @@ export function Spend() {
         </p>
       </Block>
 
-      <Block title="Where the money goes">
-        <ResponsiveContainer width="100%" height={Math.max(160, byAgent.length * 46)}>
-          <BarChart data={byAgent} layout="vertical" margin={{ left: 8, right: 68, top: 4 }}>
-            <CartesianGrid horizontal={false} stroke="var(--grid)" />
-            <XAxis
-              type="number"
-              tick={AXIS}
-              tickLine={false}
-              axisLine={{ stroke: "var(--baseline)" }}
-            />
-            <YAxis
-              type="category"
-              dataKey="label"
-              width={124}
-              tick={AXIS}
-              tickLine={false}
-              axisLine={{ stroke: "var(--baseline)" }}
-            />
-            <Tooltip
-              cursor={{ fill: "var(--grid)", opacity: 0.4 }}
-              content={<ChartTooltip unit={usd} />}
-            />
-            <Bar dataKey="total_cost_usd" fill="var(--series-1)" radius={[0, 4, 4, 0]} barSize={16}>
-              <LabelList
-                dataKey="total_cost_usd"
-                position="right"
-                formatter={(v: number) => usd(v)}
-                style={{ fill: "var(--text-secondary)", fontSize: 11 }}
-              />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </Block>
-
-      <Block title="Over time">
-        {data.trend.length < 2 ? (
-          <p className="empty">
-            One day of runs so far. A trend needs at least two to say anything true.
-          </p>
-        ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={data.trend} margin={{ left: 8, right: 16, top: 8 }}>
-              <CartesianGrid vertical={false} stroke="var(--grid)" />
+      {/* Where against when: the same money cut two ways, so they belong on one line. */}
+      <Spread>
+        <Block title="Where the money goes">
+          <ResponsiveContainer width="100%" height={Math.max(160, byAgent.length * 46)}>
+            <BarChart
+              data={byAgent}
+              layout="vertical"
+              margin={{ left: 8, right: 68, top: 4 }}
+            >
+              <CartesianGrid horizontal={false} stroke="var(--grid)" />
               <XAxis
-                dataKey="day"
+                type="number"
                 tick={AXIS}
                 tickLine={false}
                 axisLine={{ stroke: "var(--baseline)" }}
               />
-              <YAxis tick={AXIS} tickLine={false} axisLine={false} />
-              <Tooltip content={<ChartTooltip unit={usd} />} />
-              <Line
-                type="monotone"
-                dataKey="total_cost_usd"
-                stroke="var(--series-1)"
-                strokeWidth={2}
-                dot={{ r: 4, fill: "var(--series-1)", stroke: "var(--surface-1)", strokeWidth: 2 }}
+              <YAxis
+                type="category"
+                dataKey="label"
+                width={124}
+                tick={AXIS}
+                tickLine={false}
+                axisLine={{ stroke: "var(--baseline)" }}
               />
-            </LineChart>
+              <Tooltip
+                cursor={{ fill: "var(--grid)", opacity: 0.4 }}
+                content={<ChartTooltip unit={usd} />}
+              />
+              <Bar
+                dataKey="total_cost_usd"
+                fill="var(--series-1)"
+                radius={[0, 4, 4, 0]}
+                barSize={16}
+              >
+                <LabelList
+                  dataKey="total_cost_usd"
+                  position="right"
+                  formatter={(v: number) => usd(v)}
+                  style={{ fill: "var(--text-secondary)", fontSize: 11 }}
+                />
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
-        )}
-      </Block>
+        </Block>
 
-      <Block title="Was it worth it">
-        <div className="scroll-x">
-          <table>
-            <thead>
-              <tr>
-                <th>Outcome</th>
-                <th className="num">Leads</th>
-                <th className="num">Total</th>
-                <th className="num">Each</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.per_outcome.map((o) => (
-                <tr key={o.outcome}>
-                  <td>{readOutcome(o.outcome)?.label ?? "No verdict"}</td>
-                  <td className="num">{o.count}</td>
-                  <td className="num">{usd(o.total_cost_usd)}</td>
-                  <td className="num">{usd(o.avg_cost_usd)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Block>
+        <Block title="Over time">
+          {data.trend.length < 2 ? (
+            <p className="empty">
+              One day of runs so far. A trend needs at least two to say anything true.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={data.trend} margin={{ left: 8, right: 16, top: 8 }}>
+                <CartesianGrid vertical={false} stroke="var(--grid)" />
+                <XAxis
+                  dataKey="day"
+                  tick={AXIS}
+                  tickLine={false}
+                  axisLine={{ stroke: "var(--baseline)" }}
+                />
+                <YAxis tick={AXIS} tickLine={false} axisLine={false} />
+                <Tooltip content={<ChartTooltip unit={usd} />} />
+                <Line
+                  type="monotone"
+                  dataKey="total_cost_usd"
+                  stroke="var(--series-1)"
+                  strokeWidth={2}
+                  dot={{
+                    r: 4,
+                    fill: "var(--series-1)",
+                    stroke: "var(--surface-1)",
+                    strokeWidth: 2,
+                  }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </Block>
+      </Spread>
 
-      <Block title="By department">
-        <div className="scroll-x">
-          <table>
-            <thead>
-              <tr>
-                <th>Department</th>
-                <th className="num">LLM calls</th>
-                <th className="num">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.by_department.map((d) => (
-                <tr key={d.department}>
-                  <td>{d.department}</td>
-                  <td className="num">{d.calls}</td>
-                  <td className="num">{usd(d.total_cost_usd)}</td>
+      {/* Two three-column tables. Stretched across a wide pane each is mostly gap. */}
+      <Spread>
+        <Block title="Was it worth it">
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>Outcome</th>
+                  <th className="num">Leads</th>
+                  <th className="num">Total</th>
+                  <th className="num">Each</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Block>
+              </thead>
+              <tbody>
+                {data.per_outcome.map((o) => (
+                  <tr key={o.outcome}>
+                    <td>{readOutcome(o.outcome)?.label ?? "No verdict"}</td>
+                    <td className="num">{o.count}</td>
+                    <td className="num">{usd(o.total_cost_usd)}</td>
+                    <td className="num">{usd(o.avg_cost_usd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Block>
+
+        <Block title="By department">
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>Department</th>
+                  <th className="num">LLM calls</th>
+                  <th className="num">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.by_department.map((d) => (
+                  <tr key={d.department}>
+                    <td>{d.department}</td>
+                    <td className="num">{d.calls}</td>
+                    <td className="num">{usd(d.total_cost_usd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Block>
+      </Spread>
     </>
   );
 }

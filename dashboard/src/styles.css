@@ -345,8 +345,11 @@ body {
   background: var(--surface-1);
 }
 
+/* Uncapped on purpose. A fixed reading measure left the right half of a wide monitor
+   empty, so the pane runs the full width of its column and the panes pair their blocks
+   into two bands (see .spread) rather than stretching one column of prose across it. */
 .pane-inner {
-  max-width: 860px;
+  max-width: none;
   padding: 26px 28px 72px;
 }
 
@@ -389,7 +392,12 @@ body {
   border-top: 1px solid var(--grid);
 }
 
-.block:first-of-type {
+/* The block that opens a pane carries no rule: the pane head is its own separation.
+   Said against `.pane-head` rather than as `:first-of-type`, which counts siblings and
+   so names the wrong block the moment a .spread nests some of them -- the last block in
+   the pane would strip its rule while the first kept one. */
+.pane-head + .block,
+.pane-head + .spread > .block:first-child {
   padding-top: 0;
   margin-top: 0;
   border-top: none;
@@ -402,6 +410,45 @@ body {
   letter-spacing: 0.05em;
   color: var(--muted);
   margin: 0 0 12px;
+}
+
+/* Two blocks the pane wants side by side once there is room for two readable columns.
+   Narrow, this is a pass-through: a one-column grid changes nothing, so every block
+   keeps its own Grid Rule and its own 22px of clearance. */
+.spread {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Wide, the pair becomes one band. The band takes over the horizontal rule and the
+   blocks inside it give theirs up, so both columns start on the same line; the divider
+   between them is the same Grid Rule stood on end. */
+@media (min-width: 1240px) {
+  .spread {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 36px;
+    align-items: start;
+    padding-top: 22px;
+    margin-top: 22px;
+    border-top: 1px solid var(--grid);
+  }
+
+  .pane-head + .spread {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+  }
+
+  .spread > .block {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+  }
+
+  .spread > .block + .block {
+    padding-left: 36px;
+    border-left: 1px solid var(--grid);
+  }
 }
 
 /* The briefing's answer: a sentence, with its load-bearing figure at display size. */
@@ -724,6 +771,19 @@ pre.payload {
   max-width: 62ch;
 }
 
+/* What a run was about, above the sentence about how it ended. The subject is primary
+   text because it is the one thing on the screen the reader recognises; the work done to
+   it trails behind at secondary weight, as context rather than a second claim. */
+.subject {
+  color: var(--text-primary);
+  margin: 10px 0 0;
+  max-width: 74ch;
+}
+
+.subject .work {
+  color: var(--text-secondary);
+}
+
 .chart-tooltip {
   background: var(--surface-1);
   border: 1px solid var(--border);
@@ -769,8 +829,11 @@ pre.payload {
 
    The one scoped exception to this system: a committed dark world with a colour
    per department, pinned by the brief. See DESIGN.md > Scoped Exceptions. The
-   exception stops at .map-stage -- the legend below it is ordinary console chrome,
-   and none of the four reserved status hues appear inside the map at all.
+   exception stops at .map-stage, which has two hosts -- the Map pane and the graph
+   embedded in a lead's detail (.map-stage.is-run, which differs in sizing alone).
+   A second host does not widen what the exception permits: the same tokens and the
+   same rules apply inside both, everything around either one is ordinary console
+   chrome, and none of the four reserved status hues appear inside either at all.
 
    Every static colour is a token here. The only value the component sets is each
    department's --hue, which is data; the colour recipe stays in this file. */
@@ -796,10 +859,11 @@ pre.payload {
   --map-star: oklch(99% 0 0);
   --map-star-alt: oklch(88% 0.03 250);
 
-  /* The department colour recipe. --hue arrives from the data. */
-  --map-hue: oklch(72% 0.16 var(--hue));
-  --map-hue-soft: oklch(70% 0.13 var(--hue) / 0.32);
-  --map-hue-bright: oklch(86% 0.15 var(--hue));
+  /* No --map-hue-* tokens here on purpose. --hue is set per element by hueVar(), and a
+     custom property's var() is substituted on the element that DECLARES it -- so a recipe
+     written here would resolve against a --hue this element does not have, compute to
+     guaranteed-invalid, and paint every fill black. Hue-derived colours are written
+     directly at their point of use instead. */
 
   position: relative;
   flex: 1;
@@ -830,6 +894,18 @@ pre.payload {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* The ground layer, spanning the whole stage rather than the square canvas. Sits before
+   .map-canvas in the DOM so the constellation paints over it, and takes no pointer events
+   so it can never swallow a node or edge hover. */
+.map-starfield {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
 }
 
 /* Static by choice. The reference is a still field, and a continuously rotating
@@ -870,28 +946,32 @@ pre.payload {
   stroke: oklch(78% 0.15 var(--hue));
   stroke-width: calc(0.75px + var(--w) * 1px);
   stroke-linecap: round;
-  opacity: calc(0.2 + var(--w) * 0.14);
+  /* --fade runs 1 -> 0 across the linger window once the last contributing run finished,
+     driven from the component because a 4s poll cannot carry a 6s fade. */
+  opacity: calc((0.2 + var(--w) * 0.14) * var(--fade, 1));
   transition: opacity var(--fast) var(--ease);
 }
 
 /* Below a normal flow edge on purpose: a handoff the schema refused should never read as
    more substantial than one that went through. */
+/* Every override multiplies --fade back in. A flat opacity here would pin the edge and
+   it would never fade out at all. */
 .map-flow path.rejected {
   stroke-dasharray: 5 7;
-  opacity: 0.16;
+  opacity: calc(0.16 * var(--fade, 1));
 }
 
 /* Live and hovered still punch hard -- the resting field is quiet so these can carry. */
 .map-flow path.live {
-  opacity: 0.95;
+  opacity: calc(0.95 * var(--fade, 1));
 }
 
 .map-flow path.muted {
-  opacity: 0.06;
+  opacity: calc(0.06 * var(--fade, 1));
 }
 
 .map-flow path.hot {
-  opacity: 1;
+  opacity: var(--fade, 1);
   stroke-width: calc(2px + var(--w) * 1px);
 }
 
@@ -961,15 +1041,18 @@ pre.payload {
   animation: map-pulse-core 2.2s var(--ease) infinite;
 }
 
-#core-halo .halo-in {
+/* Keyed by class, not by the gradient's id: two stages exist, each needs its own
+   <radialGradient> because ids are unique per document, and an id selector could only ever
+   have dressed one of them. */
+.map-halo .halo-in {
   stop-color: oklch(92% 0.03 250);
   stop-opacity: 0.8;
 }
-#core-halo .halo-mid {
+.map-halo .halo-mid {
   stop-color: oklch(80% 0.06 250);
   stop-opacity: 0.2;
 }
-#core-halo .halo-out {
+.map-halo .halo-out {
   stop-color: oklch(70% 0.08 250);
   stop-opacity: 0;
 }
@@ -985,7 +1068,7 @@ pre.payload {
 }
 
 .map-hub .hub {
-  fill: var(--map-hue);
+  fill: oklch(72% 0.16 var(--hue));
 }
 
 .map-hub .ring {
@@ -1008,8 +1091,10 @@ pre.payload {
   opacity: 0.8;
 }
 
+/* The same hue as at rest, lifted in lightness. Bright is the live signal; the hue is
+   the department's identity and must survive it. */
 .map-node.live .node {
-  fill: var(--map-hue-bright);
+  fill: oklch(86% 0.15 var(--hue));
   opacity: 1;
 }
 
@@ -1019,7 +1104,7 @@ pre.payload {
 }
 
 .map-node .pulse {
-  fill: var(--map-hue-soft);
+  fill: oklch(70% 0.13 var(--hue) / 0.32);
   transform-box: fill-box;
   transform-origin: center;
   animation: map-pulse 2.2s var(--ease) infinite;
@@ -1106,7 +1191,11 @@ pre.payload {
   color: var(--map-dormant-text);
 }
 
-.map-labels > div.dimmed {
+/* Department labels only, and scoped on purpose. As `.map-labels > div.dimmed` this was
+   (0,2,1) and beat .map-agent-label's (0,1,0) `opacity: 0` -- so dimming an agent label
+   made it *visible* at 20%, and hovering a hub revealed every other department's agents
+   while hiding its own. Agent labels are governed solely by .map-agent-label[.shown]. */
+.map-dept-label.dimmed {
   opacity: 0.2;
 }
 
@@ -1203,6 +1292,40 @@ pre.payload {
 .map-chip-count {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
+}
+
+/* --------------------------------------------------------- the run graph
+
+   The same dark world, embedded per run at the bottom of a lead's detail. Same tokens, same
+   classes, same geometry -- only the sizing differs, and it has to: the map's stage takes the
+   leftover height of a full-height flex pane, while this one sits in a normal scrolling
+   document and has to state its own box. */
+
+.map-stage.is-run {
+  /* `flex: 1` is inert outside a flex column, and `min-height: 460px` would be a floor with
+     no ceiling. Square and capped instead: the constellation is square, so a stage that is
+     not square is dead ground either side of it -- and below the cap the ratio takes over
+     and the stage shrinks with its column, which is what both the spread's half-width
+     column and the narrow-screen slide-over need without a breakpoint of their own. */
+  flex: none;
+  min-height: 0;
+  width: min(100%, 720px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+}
+
+/* The halo's paint server is set here rather than on the element, because `fill` in CSS
+   beats a presentation attribute -- an attribute on the circle would never take. Each stage
+   owns a gradient under its own id, since only one pane is mounted at a time and a stage
+   pointing at the other one's would resolve to nothing and lose its halo entirely. */
+.map-stage.is-run .map-core .halo {
+  fill: url(#run-core-halo);
+}
+
+/* One travelling head walking the run's hops in order, not a dot per edge. It is remounted
+   at each hop -- the React key restarts the keyframe -- so it must not loop on its own. */
+.map-flow-dots circle.relay {
+  animation-iteration-count: 1;
 }
 
 /* ------------------------------------------------------------- responsive */

@@ -5,7 +5,8 @@ export type PathStep = {
   status: string;
 };
 
-export type Orchestration = {
+/** The columns of the orchestrations table, which both endpoints return verbatim. */
+export type OrchestrationCore = {
   id: string;
   crm_reference_id: string;
   status: string;
@@ -14,6 +15,10 @@ export type Orchestration = {
   finished_at: string | null;
   final_result: unknown;
   total_cost_usd: number;
+};
+
+/** A row from GET /orchestrations. */
+export type Orchestration = OrchestrationCore & {
   step_count: number;
   current_stage: string | null;
   /**
@@ -45,10 +50,29 @@ export type Decision = {
   timestamp: string;
 };
 
-export type OrchestrationDetail = Orchestration & {
+/**
+ * GET /orchestrations/{id}.
+ *
+ * Deliberately built on OrchestrationCore, not on Orchestration: `step_count`,
+ * `current_stage` and `agent_path` are computed in `list_orchestrations` and the detail
+ * query does not compute them. Declaring them here would make `flowEdges(detail)`
+ * typecheck and silently return nothing.
+ */
+export type OrchestrationDetail = OrchestrationCore & {
   runs: Run[];
   decisions: Decision[];
 };
+
+/**
+ * The route the detail endpoint does not send. Its `runs` are the same data -- one row per
+ * invocation, carrying the same three fields -- so the path is derivable client-side with
+ * no second query. Sorted here rather than trusting the SQL, so the ordering guarantee is
+ * local to the thing that depends on it.
+ */
+export const pathFromRuns = (runs: Run[]): PathStep[] =>
+  [...runs]
+    .sort((a, b) => a.step_no - b.step_no)
+    .map((r) => ({ department: r.department, agent: r.agent, status: r.status }));
 
 export type Costs = {
   by_agent: {

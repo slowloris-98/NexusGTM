@@ -1,8 +1,10 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { plural, type Departments, type Orchestration } from "../api";
 import {
+  LINGER_MS,
   NODE,
   ORCHESTRATOR,
+  activeForMap,
   buildGraph,
   flowEdges,
   liveKeys,
@@ -53,6 +55,18 @@ const anchorShift: Record<GraphNode["labelAnchor"], string> = {
  */
 type Readout = { name: string; detail: string };
 
+/**
+ * An agent is named when its own node is hovered, or when its department's hub is.
+ *
+ * Pure and exported because hover lives in React state and a server render cannot reach it;
+ * this is the only way the "a hub reveals its own agents and nobody else's" rule is testable.
+ */
+export const agentLabelShown = (
+  agent: GraphNode,
+  hotNode: string | null,
+  branch: string | null,
+) => hotNode === agent.key || branch === agent.department;
+
 const nodeReadout = (node: GraphNode): Readout => ({
   name: node.label,
   detail: node.description,
@@ -70,9 +84,11 @@ const MAX_DOTS = 24;
 const edgeReadout = (edge: FlowEdge): Readout => ({
   name: `${edge.fromLabel} → ${edge.toLabel}`,
   detail:
-    `The planner handed off this way ${plural(edge.count, "time")}.` +
+    (edge.liveNow
+      ? `${plural(edge.count, "lead")} moving along this handoff right now.`
+      : `Just finished. ${plural(edge.count, "lead")} came this way.`) +
     (edge.rejected > 0
-      ? ` ${edge.rejected} of those were rejected by ${edge.toLabel}'s schema and re-planned.`
+      ? ` ${edge.rejected} was rejected by ${edge.toLabel}'s schema and re-planned.`
       : ""),
 });
 
@@ -87,10 +103,35 @@ export function SystemMap({
   depts: Departments | null;
   rows: Orchestration[];
 }) {
+  // Polling is every 4s, far too coarse to fade over 6s. This ticker drives the fade, and
+  // only exists while something is running or still fading -- an idle map runs no timer.
+  const [now, setNow] = useState(() => Date.now());
+  const active = useMemo(() => activeForMap(rows, now), [rows, now]);
+  const ticking = active.length > 0;
+
+  useEffect(() => {
+    if (!ticking) return;
+    const timer = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(timer);
+  }, [ticking]);
+
+  // A poll can deliver a brand-new run while the timer is torn down, so re-read the clock
+  // whenever the rows change. Without this an idle map would never notice a run starting.
+  useEffect(() => setNow(Date.now()), [rows]);
+
   const graph = useMemo(() => buildGraph(depts, rows), [depts, rows]);
-  const edges = useMemo(() => flowEdges(graph, rows), [graph, rows]);
+  const edges = useMemo(() => flowEdges(graph, active), [graph, active]);
+
+  /** 1 while live, falling to 0 across the linger window once the last run finished. */
+  const fadeOf = (edge: FlowEdge) => {
+    if (edge.liveNow || !edge.lastFinishedAt) return 1;
+    const age = now - new Date(edge.lastFinishedAt).getTime();
+    return Math.max(0, Math.min(1, 1 - age / LINGER_MS));
+  };
   const live = useMemo(() => liveKeys(rows), [rows]);
-  const stars = useMemo(() => starfield(260), []);
+  // 420, not 260: the stage is about 1.6x the area of the square canvas the field used to
+  // sit in, so the old count would read noticeably thinner spread across all of it.
+  const stars = useMemo(() => starfield(420), []);
 
   // One slot fed by nodes and edges alike, so the strip does not care what produced it.
   const [readout, setReadout] = useState<Readout | null>(null);
@@ -115,10 +156,13 @@ export function SystemMap({
       ? `Not answering: ${unreachable.map((d) => d.label).join(", ")}.`
       : "All departments answering.",
     edges.length
-      ? `Observed handoffs: ${edges
-          .map((e) => `${e.fromLabel} to ${e.toLabel}, ${plural(e.count, "time")}`)
+      ? `Handoffs in flight: ${edges
+          .map(
+            (e) =>
+              `${e.fromLabel} to ${e.toLabel}, ${plural(e.count, "lead")}${e.liveNow ? "" : ", just finished"}`,
+          )
           .join("; ")}.`
-      : "No handoffs recorded yet.",
+      : "Nothing is running, so no handoffs are drawn.",
     live.planning ? "The planner is choosing a next step." : "",
     live.nodes.size
       ? `Working now: ${[...live.nodes].map((k) => graph.byKey.get(k)?.label ?? k).join(", ")}.`
@@ -170,6 +214,36 @@ export function SystemMap({
       </header>
 
       <div className="map-stage">
+        {/* The ground, covering the whole stage rather than the square canvas.
+            Deliberately no viewBox: percentage cx/cy resolve against this element's own
+            box so the field spreads evenly at any aspect ratio, while a plain-number r is
+            CSS px and keeps every star round. A viewBox would force preserveAspectRatio,
+            which either crops most of the field away or stretches the dots into ellipses. */}
+        <svg className="map-starfield" aria-hidden="true">
+          <g className="map-stars map-stars-a">
+            {stars.slice(0, 270).map((s, i) => (
+              <circle
+                key={i}
+                cx={`${((s.x / SIZE) * 100).toFixed(2)}%`}
+                cy={`${((s.y / SIZE) * 100).toFixed(2)}%`}
+                r={s.r.toFixed(2)}
+                opacity={s.o.toFixed(2)}
+              />
+            ))}
+          </g>
+          <g className="map-stars map-stars-b">
+            {stars.slice(270).map((s, i) => (
+              <circle
+                key={i}
+                cx={`${((s.x / SIZE) * 100).toFixed(2)}%`}
+                cy={`${((s.y / SIZE) * 100).toFixed(2)}%`}
+                r={(s.r * 0.8).toFixed(2)}
+                opacity={(s.o * 0.7).toFixed(2)}
+              />
+            ))}
+          </g>
+        </svg>
+
         <div className="map-canvas">
         <svg
           className="map-svg"
@@ -182,7 +256,9 @@ export function SystemMap({
           <desc id="map-desc">{describe}</desc>
 
           <defs>
-            <radialGradient id="core-halo">
+            {/* Dressed by .map-halo, not by its id: the run graph needs its own gradient
+                and ids are unique per document. */}
+            <radialGradient id="core-halo" className="map-halo">
               <stop className="halo-in" offset="0%" />
               <stop className="halo-mid" offset="45%" />
               <stop className="halo-out" offset="100%" />
@@ -195,17 +271,6 @@ export function SystemMap({
               </feMerge>
             </filter>
           </defs>
-
-          <g className="map-stars map-stars-a">
-            {stars.slice(0, 170).map((s, i) => (
-              <circle key={i} cx={s.x} cy={s.y} r={s.r} opacity={s.o} />
-            ))}
-          </g>
-          <g className="map-stars map-stars-b">
-            {stars.slice(170).map((s, i) => (
-              <circle key={i} cx={s.x} cy={s.y} r={s.r * 0.8} opacity={s.o * 0.7} />
-            ))}
-          </g>
 
           {/* Structural: the constellation's silhouette. */}
           <g className="map-structural">
@@ -240,18 +305,25 @@ export function SystemMap({
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  style={{ ...hueVar(e.hue), "--w": e.weight } as CSSProperties}
+                  style={
+                    {
+                      ...hueVar(e.hue),
+                      "--w": e.weight,
+                      "--fade": fadeOf(e).toFixed(3),
+                    } as CSSProperties
+                  }
                   d={e.d}
                 />
               );
             })}
           </g>
 
-          {/* A dot per handoff, running sender to receiver. Wholly-rejected edges get none:
-              nothing flowed, so nothing travels. */}
+          {/* A dot per handoff in flight, running sender to receiver. Wholly-rejected edges
+              get none -- nothing flowed. Nor do fading ones: that run is over, so the line
+              fades on its own rather than pretending work is still moving along it. */}
           <g className="map-flow-dots">
             {edges
-              .filter((e) => e.rejected !== e.count)
+              .filter((e) => e.liveNow && e.rejected !== e.count)
               .slice(-MAX_DOTS)
               .map((e, i) => (
                 <circle
@@ -371,9 +443,12 @@ export function SystemMap({
           {agents.map((a) => (
             <div
               key={a.key}
+              // No `dimmed` here on purpose: a hidden label needs no dimming and a revealed
+              // one must not be dimmed. Carrying the class would re-arm the specificity
+              // trap for whoever next writes a .dimmed rule.
               className={`map-agent-label${a.fromHistory ? " historical" : ""}${
-                dimmed(a) ? " dimmed" : ""
-              }${live.nodes.has(a.key) ? " live" : ""}${hotNode === a.key ? " shown" : ""}`}
+                live.nodes.has(a.key) ? " live" : ""
+              }${agentLabelShown(a, hotNode, branch) ? " shown" : ""}`}
               style={{
                 ...hueVar(a.hue),
                 left: pct(a.x),
@@ -403,8 +478,8 @@ export function SystemMap({
             {readout
               ? readout.detail
               : edges.length
-                ? `${plural(edges.length, "distinct handoff")} observed across ${plural(rows.length, "orchestration")}. Line weight is how often.`
-                : "No handoffs recorded yet — run scripts/seed.py to put leads through."}
+                ? `${plural(edges.length, "handoff")} in flight. Line weight is how many leads are on each.`
+                : "Handoffs are drawn only while leads are moving. Nothing is in flight, so the map is showing the system at rest."}
           </p>
         </div>
       </div>

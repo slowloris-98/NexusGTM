@@ -8,7 +8,7 @@ import {
   type Departments,
   type Orchestration,
 } from "../api";
-import { Block, useAsync } from "../components";
+import { Block, Spread, useAsync } from "../components";
 import { needsAttention, readStatus } from "../vocabulary";
 
 /**
@@ -61,104 +61,108 @@ export function Briefing({
         </p>
       </header>
 
-      <Block title="Health">
-        {unreachable.length > 0 ? (
-          <>
-            <p className="answer alert">
-              {unreachable.map((d) => d.name).join(" and ")}{" "}
-              {unreachable.length === 1 ? "is not answering" : "are not answering"}.
-            </p>
-            <p className="support">
-              <span>
-                The planner is still running, with the {plural(deptCount, "department")}{" "}
-                that responded — leads may skip work those agents would have done.
-              </span>
-            </p>
-            <p className="support">
-              {unreachable.map((d) => (
-                <span key={d.id} className="mono">
-                  {d.endpoint}
+      {/* The two questions a glance is actually asking -- is it up, and does it want me --
+          read as one band on a wide screen rather than as two scrolls of it. */}
+      <Spread>
+        <Block title="Health">
+          {unreachable.length > 0 ? (
+            <>
+              <p className="answer alert">
+                {unreachable.map((d) => d.name).join(" and ")}{" "}
+                {unreachable.length === 1 ? "is not answering" : "are not answering"}.
+              </p>
+              <p className="support">
+                <span>
+                  The planner is still running, with the {plural(deptCount, "department")}{" "}
+                  that responded — leads may skip work those agents would have done.
                 </span>
-              ))}
-            </p>
-          </>
-        ) : deptCount === 0 ? (
-          <>
-            <p className="answer alert">No departments are answering.</p>
-            <p className="support">
-              <span>
-                Start the department servers before the API, or the registry comes up with
-                an empty action space and nothing can run.
-              </span>
-            </p>
-          </>
-        ) : inFlight.length > 0 ? (
-          <>
-            <p className="answer">
-              <span className="fig">{inFlight.length}</span>{" "}
-              {inFlight.length === 1 ? "lead is" : "leads are"} being worked right now.
-            </p>
-            <p className="support">
-              <span>All {plural(deptCount, "department")} answering</span>
-              <span className="sep">{plural(agentCount, "agent")} registered</span>
-              <span className="sep">refreshed every 4 seconds</span>
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="answer">
-              All {plural(deptCount, "department")} answering.{" "}
-              <span className="quiet">Nothing is running.</span>
-            </p>
-            <p className="support">
-              <span>{plural(agentCount, "agent")} registered</span>
-              <span className="sep">refreshed every 4 seconds</span>
-            </p>
-          </>
-        )}
-      </Block>
+              </p>
+              <p className="support">
+                {unreachable.map((d) => (
+                  <span key={d.id} className="mono">
+                    {d.endpoint}
+                  </span>
+                ))}
+              </p>
+            </>
+          ) : deptCount === 0 ? (
+            <>
+              <p className="answer alert">No departments are answering.</p>
+              <p className="support">
+                <span>
+                  Start the department servers before the API, or the registry comes up
+                  with an empty action space and nothing can run.
+                </span>
+              </p>
+            </>
+          ) : inFlight.length > 0 ? (
+            <>
+              <p className="answer">
+                <span className="fig">{inFlight.length}</span>{" "}
+                {inFlight.length === 1 ? "lead is" : "leads are"} being worked right now.
+              </p>
+              <p className="support">
+                <span>All {plural(deptCount, "department")} answering</span>
+                <span className="sep">{plural(agentCount, "agent")} registered</span>
+                <span className="sep">refreshed every 4 seconds</span>
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="answer">
+                All {plural(deptCount, "department")} answering.{" "}
+                <span className="quiet">Nothing is running.</span>
+              </p>
+              <p className="support">
+                <span>{plural(agentCount, "agent")} registered</span>
+                <span className="sep">refreshed every 4 seconds</span>
+              </p>
+            </>
+          )}
+        </Block>
 
-      <Block title="Needs you">
-        {attention.length === 0 ? (
-          <>
-            <p className="answer">Nothing needs you.</p>
-            <p className="support">
-              <span>
-                {today.length === 0
-                  ? mostRecent
-                    ? `No leads started today. The last one ran ${when(mostRecent.started_at)}.`
-                    : "No leads have run yet."
-                  : `${plural(cleanToday.length, "run")} finished cleanly today, out of ${today.length} started.`}
-              </span>
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="answer">
-              <span className="fig">{attention.length}</span>{" "}
-              {attention.length === 1 ? "run needs" : "runs need"} a look.
-            </p>
-            <ul className="exceptions">
-              {attention.map((row) => {
-                const status = readStatus(row.status);
-                return (
-                  <li key={row.id}>
-                    <button
-                      type="button"
-                      className="exception"
-                      onClick={() => onOpen(row.id)}
-                    >
-                      <span className="who">{row.crm_reference_id}</span>
-                      <span className="what">{status.gloss || status.label}</span>
-                      <span className="when">{shortWhen(row.started_at)}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-      </Block>
+        <Block title="Needs you">
+          {attention.length === 0 ? (
+            <>
+              <p className="answer">Nothing needs you.</p>
+              <p className="support">
+                <span>
+                  {today.length === 0
+                    ? mostRecent
+                      ? `No leads started today. The last one ran ${when(mostRecent.started_at)}.`
+                      : "No leads have run yet."
+                    : `${plural(cleanToday.length, "run")} finished cleanly today, out of ${today.length} started.`}
+                </span>
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="answer">
+                <span className="fig">{attention.length}</span>{" "}
+                {attention.length === 1 ? "run needs" : "runs need"} a look.
+              </p>
+              <ul className="exceptions">
+                {attention.map((row) => {
+                  const status = readStatus(row.status);
+                  return (
+                    <li key={row.id}>
+                      <button
+                        type="button"
+                        className="exception"
+                        onClick={() => onOpen(row.id)}
+                      >
+                        <span className="who">{row.crm_reference_id}</span>
+                        <span className="what">{status.gloss || status.label}</span>
+                        <span className="when">{shortWhen(row.started_at)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </Block>
+      </Spread>
 
       <Block title="Spend">
         {today.length === 0 ? (

@@ -1,13 +1,24 @@
 import { api, plural, usd, when } from "../api";
-import { Block, Chip, Skeleton, useAsync } from "../components";
-import { readAgent, readOutcome, readRunStatus, readStatus } from "../vocabulary";
-import type { Decision } from "../api";
+import { Block, Chip, Skeleton, Spread, useAsync } from "../components";
+import {
+  readAgent,
+  readOutcome,
+  readRunStatus,
+  readStatus,
+  readSubject,
+} from "../vocabulary";
+import { RunGraph } from "./RunGraph";
+import type { Decision, Departments } from "../api";
 
 /**
  * One lead's whole story. The decision trail leads, ahead of the runs table:
  * PRODUCT.md holds that a decision is incomplete without its rationale.
+ *
+ * `depts` is threaded down rather than fetched here: /departments does live registry
+ * discovery on every call, so a second poller would double that work for data App is
+ * already holding.
  */
-export function Orchestration({ id }: { id: string }) {
+export function Orchestration({ id, depts }: { id: string; depts: Departments | null }) {
   const { data, error, loading } = useAsync(() => api.orchestration(id), [id], 4000);
 
   if (error)
@@ -40,6 +51,7 @@ export function Orchestration({ id }: { id: string }) {
 
   const status = readStatus(data.status);
   const outcome = readOutcome(data.outcome);
+  const subject = readSubject(data);
 
   return (
     <>
@@ -57,52 +69,75 @@ export function Orchestration({ id }: { id: string }) {
           {" · "}
           {usd(data.total_cost_usd)} in LLM cost
         </p>
+        {/* What the run was about, before what became of it. Read from the payload the
+            orchestrator was seeded with -- there is no goal field to print. */}
+        {subject && (
+          <p className="subject">
+            {subject.who}
+            {subject.work && <span className="work"> — {subject.work}</span>}
+          </p>
+        )}
         {status.gloss && <p className="gloss">{status.gloss}</p>}
       </header>
 
-      <Block title="Why the planner did what it did">
-        <Trail decisions={data.decisions} />
-      </Block>
+      {/* The rationale beside the shape it produced. The trail still leads -- PRODUCT.md
+          holds that a decision is incomplete without it -- and the graph is the same
+          route drawn, so reading one against the other is the point of the pairing. */}
+      <Spread>
+        <Block title="Why the planner did what it did">
+          <Trail decisions={data.decisions} />
+        </Block>
 
-      <Block title="What each agent did">
-        {data.runs.length === 0 ? (
-          <p className="empty">No agent ran. The planner stopped before invoking one.</p>
-        ) : (
-          <div className="scroll-x">
-            <table>
-              <thead>
-                <tr>
-                  <th className="num">Step</th>
-                  <th>Department</th>
-                  <th>Agent</th>
-                  <th>Result</th>
-                  <th className="num">Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.runs.map((run) => {
-                  const runStatus = readRunStatus(run.status);
-                  return (
-                    <tr key={run.id}>
-                      <td className="num">{run.step_no}</td>
-                      <td>{run.department}</td>
-                      <td>{readAgent(run.agent)}</td>
-                      <td>
-                        <Chip reading={runStatus} />
-                      </td>
-                      <td className="num">{usd(run.cost_usd)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Block>
+        {/* Keyed by id so switching leads remounts it: the relay's cursor is a position in
+            one run's path, and resuming it partway through a different route is nonsense. */}
+        <Block title="How this run moved">
+          <RunGraph key={data.id} depts={depts} detail={data} />
+        </Block>
+      </Spread>
 
-      <Block title="What the run knew when it stopped">
-        <pre className="payload">{JSON.stringify(data.final_result, null, 2)}</pre>
-      </Block>
+      <Spread>
+        <Block title="What each agent did">
+          {data.runs.length === 0 ? (
+            <p className="empty">
+              No agent ran. The planner stopped before invoking one.
+            </p>
+          ) : (
+            <div className="scroll-x">
+              <table>
+                <thead>
+                  <tr>
+                    <th className="num">Step</th>
+                    <th>Department</th>
+                    <th>Agent</th>
+                    <th>Result</th>
+                    <th className="num">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.runs.map((run) => {
+                    const runStatus = readRunStatus(run.status);
+                    return (
+                      <tr key={run.id}>
+                        <td className="num">{run.step_no}</td>
+                        <td>{run.department}</td>
+                        <td>{readAgent(run.agent)}</td>
+                        <td>
+                          <Chip reading={runStatus} />
+                        </td>
+                        <td className="num">{usd(run.cost_usd)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Block>
+
+        <Block title="What the run knew when it stopped">
+          <pre className="payload">{JSON.stringify(data.final_result, null, 2)}</pre>
+        </Block>
+      </Spread>
 
       <Block title="Raw values">
         <p className="support">

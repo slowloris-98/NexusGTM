@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { Reading, Tone } from "./vocabulary";
 
 /**
@@ -20,6 +20,28 @@ export function Chip({ reading }: { reading: Reading | null }) {
  */
 export function Dot({ tone }: { tone: Tone }) {
   return <span className={`dot ${tone}`} aria-hidden="true" />;
+}
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+
+/**
+ * The reduced-motion preference, live.
+ *
+ * The stylesheet already collapses every duration under that query, so nothing driven by
+ * CSS alone needs this. An animation driven from JS does: the run graph's relay advances
+ * on a timer, and collapsing a CSS duration does not stop a setTimeout. Live rather than
+ * read once, because the setting can change while the console is open.
+ */
+export function usePrefersReducedMotion(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(REDUCED_MOTION);
+      query.addEventListener("change", onChange);
+      return () => query.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(REDUCED_MOTION).matches,
+    () => false,
+  );
 }
 
 /** Fetch + poll helper. The console polls; there are no websockets. */
@@ -73,6 +95,19 @@ export function Block({
       {children}
     </section>
   );
+}
+
+/**
+ * A pair of blocks that sit side by side once the pane is wide enough for two readable
+ * columns, and stack like any other block when it is not.
+ *
+ * The pane is fluid and uncapped, so on a wide monitor the alternative is dead ground
+ * beside a 46ch measure. Which blocks pair is a per-pane judgement -- two small tables,
+ * or a rationale beside the picture of it -- so it is stated at the call site rather
+ * than inferred from position.
+ */
+export function Spread({ children }: { children: React.ReactNode }) {
+  return <div className="spread">{children}</div>;
 }
 
 export function ChartTooltip({

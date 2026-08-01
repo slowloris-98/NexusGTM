@@ -140,7 +140,7 @@ export default function App() {
           ) : selection.kind === "map" ? (
             <SystemMap depts={depts} rows={rows} />
           ) : (
-            <Orchestration id={selection.id} />
+            <Orchestration id={selection.id} depts={depts} />
           )}
         </div>
       </main>
