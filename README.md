@@ -1,9 +1,16 @@
-# NexusGTM — Agent Control Plane
+# NexusGTM — Observable GTM Agent Orchestration
 
-Three GTM departments (Marketing, RevOps, Sales) run agents that hand work across
-department boundaries. A goal-directed planner picks the next agent at runtime from a
-config-driven registry, and a control plane gives leadership visibility into every
-orchestration, its result, and its LLM cost per agent.
+NexusGTM is a full GTM solution built on an agent orchestration layer. Departments
+(Marketing, RevOps, Sales, etc) run agents that hand work across department boundaries, and
+a goal-directed planner sits at the center of that layer, picking the next agent at runtime
+from a config-driven registry — bringing real-time flexibility and decision making to every
+orchestration.
+
+Because the path is decided at runtime, the work needs to be observable. That is what the
+dashboard is for: live runs as they execute, every agent across every department, each
+cross-departmental hand-off, and the LLM cost attached to it — per agent, per run, per
+orchestration. Built for leadership: what the agents are doing, how work moves between
+departments, and what it costs.
 
 ![Dashboard SS1](docs/dashboard_ss3.png)
 ![Dashboard SS2](docs/dashboard_ss4.png)
