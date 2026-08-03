@@ -6,6 +6,7 @@ import { Briefing } from "./panes/Briefing";
 import { Orchestration } from "./panes/Orchestration";
 import { SystemMap } from "./panes/SystemMap";
 import { Spend } from "./panes/Spend";
+import { useTheme, type Theme } from "./theme";
 import { needsAttention } from "./vocabulary";
 
 /**
@@ -17,6 +18,7 @@ export default function App() {
   const [selection, setSelection] = useState<Selection>({ kind: "briefing" });
   const [term, setTerm] = useState("");
   const [query, setQuery] = useState("");
+  const [theme, toggleTheme] = useTheme();
 
   const { data: rowData, error: rowError } = useAsync(() => api.orchestrations(), [], 4000);
   const { data: depts } = useAsync(() => api.departments(), [], 15000);
@@ -77,6 +79,7 @@ export default function App() {
       <header className="systembar">
         <h1 className="wordmark">NexusGTM</h1>
         <span className="spacer" />
+        <ThemeToggle theme={theme} onToggle={toggleTheme} />
         {depts && (
           <span className={`health${unreachable.length ? " degraded" : ""}`}>
             <span
@@ -145,5 +148,40 @@ export default function App() {
         </div>
       </main>
     </div>
+  );
+}
+
+/**
+ * Light is the console's default and dark is the reader's choice, so this is one button
+ * with two states rather than a three-way including "system" -- there is no system state
+ * to return to.
+ *
+ * Named for what pressing it does, not for what is currently on. aria-pressed is
+ * deliberately absent: a toggle button that announces both a changing label and a pressed
+ * state reads as contradictory ("switch to dark, pressed"), and the label alone is
+ * unambiguous.
+ */
+function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }) {
+  const target = theme === "dark" ? "light" : "dark";
+  const label = `Switch to ${target} mode`;
+  return (
+    <button
+      type="button"
+      className="theme-toggle"
+      onClick={onToggle}
+      aria-label={label}
+      title={label}
+    >
+      {theme === "dark" ? (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.5" />
+          <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20.5 14.4A8.5 8.5 0 1 1 9.6 3.5a6.8 6.8 0 0 0 10.9 10.9z" />
+        </svg>
+      )}
+    </button>
   );
 }

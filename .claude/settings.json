@@ -77,7 +77,20 @@
       "Bash(node C:/Users/atrey/AppData/Local/Temp/claude/d--Atreya-College-Projects-NexusGTM/00b1b881-d791-4d32-9e5f-dab8f94b2acc/scratchpad/probe2.mjs)",
       "Bash(node_modules/.bin/esbuild --bundle --platform=node --format=esm --outfile=C:/Users/atrey/AppData/Local/Temp/claude/d--Atreya-College-Projects-NexusGTM/00b1b881-d791-4d32-9e5f-dab8f94b2acc/scratchpad/probe.mjs C:/Users/atrey/AppData/Local/Temp/claude/d--Atreya-College-Projects-NexusGTM/00b1b881-d791-4d32-9e5f-dab8f94b2acc/scratchpad/probe.ts)",
       "Bash(node C:/Users/atrey/AppData/Local/Temp/claude/d--Atreya-College-Projects-NexusGTM/00b1b881-d791-4d32-9e5f-dab8f94b2acc/scratchpad/probe.mjs C:/Users/atrey/AppData/Local/Temp/claude/d--Atreya-College-Projects-NexusGTM/00b1b881-d791-4d32-9e5f-dab8f94b2acc/scratchpad/details.json)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Read(//c/Users/atrey/.claude/skills/impeccable/**)",
+      "Bash(node -e \"console.log\\(require.resolve\\('playwright'\\)\\)\")",
+      "Bash(node .claude/skills/impeccable/scripts/live-browser.js --help)",
+      "Bash(python -m departments.marketing.server)",
+      "Bash(python -m departments.revops.server)",
+      "Bash(python -m departments.sales.server)",
+      "Bash(curl -s -m 5 http://127.0.0.1:8000/api/orchestrations)",
+      "Bash(curl -s -m 5 http://127.0.0.1:8000/api/departments)",
+      "Bash(curl -s -m 5 http://127.0.0.1:8000/openapi.json)",
+      "Bash(python -c \"import json,sys; print\\(list\\(json.load\\(sys.stdin\\)['paths']\\)\\)\")",
+      "Bash(curl -s -m 5 http://127.0.0.1:8000/orchestrations)",
+      "Bash(curl -s -m 8 http://127.0.0.1:8000/departments)",
+      "Bash(node \"C:/Users/atrey/AppData/Local/Temp/claude/d--Atreya-College-Projects-NexusGTM/41885e05-c7be-4c09-a2af-1869e1b8c286/scratchpad/shoot.mjs\")"
     ]
   }
 }

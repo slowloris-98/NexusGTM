@@ -197,6 +197,14 @@ Every value below clears 4.5:1 against the ground it sits on, in both themes. Wh
 needed to move to get there it moved in **lightness only** — hue, role, and name are
 unchanged.
 
+**Which theme is showing.** Light, always, until the reader says otherwise. The operating
+system's `prefers-color-scheme` is deliberately not consulted: the console has one default
+look, and it is the same one for every reader on every machine. Dark is reached only
+through the system bar toggle, which writes `data-theme="dark"` on `<html>` and remembers
+the choice under `nexusgtm-theme` in `localStorage` — re-applied before first paint by an
+inline script in `index.html`, so a returning reader never sees a light frame. Light needs
+no attribute; it is what the stylesheet already is.
+
 ### Primary
 
 - **Signal Blue** (`#2470cc`; dark `#3987e5`): the single interface accent. It marks *what
@@ -240,6 +248,9 @@ Status colours. Semantic only, and the only hues permitted to signal state.
   between supporting facts — one step darker than Grid Rule.
 - **Hairline** (`rgba(11, 11, 11, 0.1)`; dark `rgba(255, 255, 255, 0.1)`): every structural
   border. Alpha-based on purpose, so it darkens whatever it sits on.
+- **Shadow** (`rgba(11, 11, 11, 0.1)`; dark `rgba(0, 0, 0, 0.45)`): the only shadow colour.
+  It does not merely deepen in dark — a 10% black is invisible against Card at `#1a1a19`,
+  so the dark value is the depth needed to still read as lifted, not the same value again.
 
 ### Named Rules
 
@@ -256,7 +267,10 @@ fired.
 
 **The Dark Theme Parity Rule.** Dark is a peer theme, not a derivative. Every colour token
 carries both values, and adding one without the other is an incomplete change. Series
-colours *lighten* in dark mode; they never darken.
+colours *lighten* in dark mode; they never darken. Parity is about the token table, not
+about standing: light is still the default the console opens on. A raw colour written at
+the point of use is the failure this rule catches — it silently carries its light value
+into dark, which is how the tooltip shadow spent a release invisible.
 
 ## Typography
 
@@ -365,9 +379,9 @@ with the *chassis* colour inside the pane, so it reads as cut in rather than rai
 
 ### Shadow Vocabulary
 
-- **Floating overlay** (`box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1)`): the only shadow in the
+- **Floating overlay** (`box-shadow: 0 4px 14px var(--shadow-1)`): the only shadow in the
   system, on the chart tooltip. It marks something genuinely detached from document flow
-  and following the cursor.
+  and following the cursor. Geometry is theme-invariant; only the colour changes.
 
 ## Shapes
 
@@ -402,10 +416,18 @@ screen with weight.
 
 ### Buttons
 
-The system has no filled button. Every button is either a rail row or a text button.
+The system has no filled button. Every button is a rail row, a text button, or a hairline
+button.
 
 - **Text button:** Signal Blue, 12px, zero padding, no border or background. Underlines on
   hover.
+- **Hairline button:** a 1px Hairline border on Card, secondary text, 7px radius — the map
+  legend chip and the 26px square theme toggle. It reacts in *colour*, darkening its label
+  to Ink on hover, rather than filling: a filled hover state on the system bar would be the
+  loudest thing in a bar whose whole job is to stay quiet. Icon-only instances carry an
+  `aria-label` naming the action, and their glyphs are drawn as inline SVG on
+  `currentColor`, never typed as dingbats — `☀`/`☾` render as colour emoji on some
+  platforms, which would break the One Accent Rule by accident.
 - **Focus:** a 2px Signal Blue ring at 2px offset with a 6px radius, applied globally to
   `:focus-visible`. Mouse focus is suppressed; keyboard focus is never suppressed.
 
