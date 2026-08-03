@@ -19,6 +19,7 @@
   --grid: #e1e0d9;
   --baseline: #c3c2b7;
   --border: rgba(11, 11, 11, 0.1);
+  --shadow-1: rgba(11, 11, 11, 0.1);
 
   --series-1: #2470cc;
   --series-2: #eb6834;
@@ -42,28 +43,34 @@
   font-synthesis-weight: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) {
-    color-scheme: dark;
+/* Dark is opt-in and nothing else. The OS preference is deliberately not consulted:
+   light is the console's default for every reader on every machine, and dark is reached
+   only by pressing the system bar toggle, which persists the choice. Written as
+   data-theme on <html> by src/theme.ts and, before first paint, by the inline script in
+   index.html. See DESIGN.md > Colours. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
 
-    --page: #0d0d0d;
-    --surface-1: #1a1a19;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --muted: #898781;
-    --grid: #2c2c2a;
-    --baseline: #383835;
-    --border: rgba(255, 255, 255, 0.1);
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  /* Black on #1a1a19 is invisible; a lifted surface needs a deeper, wider shadow to
+     read as lifted at all. */
+  --shadow-1: rgba(0, 0, 0, 0.45);
 
-    --series-1: #3987e5;
-    --series-2: #f2794a;
-    --series-3: #2fcb92;
+  --series-1: #3987e5;
+  --series-2: #f2794a;
+  --series-3: #2fcb92;
 
-    --good: #17bd17;
-    --warning: #fab219;
-    --serious: #ec835a;
-    --critical: #ef6161;
-  }
+  --good: #17bd17;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #ef6161;
 }
 
 * {
@@ -160,6 +167,48 @@ body {
 .systembar .health.degraded {
   color: var(--serious);
   font-weight: 600;
+}
+
+/* The theme toggle borrows the map chip's button idiom -- hairline on a lifted surface,
+   colour rather than fill on hover -- at icon size. It sits left of health so the health
+   line keeps the bar's last position, which is where a reader already looks for it. The
+   glyph names the destination, not the current state: this is a control, not a readout. */
+.systembar .theme-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+
+/* Drawn, not typed. The sun and moon dingbats fall back to a colour emoji on some
+   platforms and to nothing on others, and neither obeys the one-accent rule. */
+.systembar .theme-toggle svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.systembar .theme-toggle:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 5%, var(--surface-1));
 }
 
 /* ------------------------------------------------------------------- rail */
@@ -790,7 +839,7 @@ pre.payload {
   border-radius: 7px;
   padding: 8px 11px;
   font-size: 12px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 14px var(--shadow-1);
 }
 
 .chart-tooltip .k {

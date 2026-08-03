@@ -3,8 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="light" />
     <title>NexusGTM Control Plane</title>
+    <!-- The stored theme, applied before first paint. Without this a reader who chose
+         dark gets a white frame while the module graph loads and React mounts. Blocking
+         and inline on purpose: an external or deferred script paints first and defeats
+         the point. The key matches src/theme.ts; light needs no attribute because it is
+         what the stylesheet already is. -->
+    <script>
+      try {
+        if (localStorage.getItem("nexusgtm-theme") === "dark")
+          document.documentElement.dataset.theme = "dark";
+      } catch (e) {
+        /* storage blocked; light is the correct fallback anyway */
+      }
+    </script>
   </head>
   <body>
     <!--
