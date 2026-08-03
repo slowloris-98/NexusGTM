@@ -5,6 +5,9 @@ department boundaries. A goal-directed planner picks the next agent at runtime f
 config-driven registry, and a control plane gives leadership visibility into every
 orchestration, its result, and its LLM cost per agent.
 
+![System Architecture](docs/dashboard_ss3.png)
+![System Architecture](docs/dashboard_ss4.png)
+
 ## Architecture
 
 ![System Architecture](docs/sys_arch.png)
