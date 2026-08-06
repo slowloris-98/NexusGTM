@@ -5,9 +5,48 @@
 4. Add more orchestration runs from seed.
 6. json section should be collasable and fields like reason and score should be directly shown.
 7. parallel execution or multiple orchestrations
-8. light mode
+8. Add eval (langsmith is already integrated)
 
 Graph:
 
 8. animation in the center orchestrator, like a group of stars moving together.
 12. graph should feel like a living creature
+
+
+
+Departments and agents:
+
+1. Sales:
+    - draft_outreach
+    - send_outreach #
+    - conversion_evaluation #
+
+2. Marketing:
+    - run_ad_campaigns #
+    - enrichment
+
+3. Revops:
+    - crm_lookup
+    - crm_sync
+    - clay_discovery #
+    - clay_enrichment
+    - clay_signal
+    - routing?
+    - scoring?
+
+4. Customer Success:
+    - churn_detection #
+    - engagement_tracking #
+
+5. Product:
+    - product_expansion #
+
+
+Orchestration flows:
+
+1. run_ad_campaigns ➔ crm_lookup ➔ clay_enrichment ➔ clay_signal ➔ scoring ➔ draft_outreach ➔ routing ➔ send_outreach ➔ crm_sync
+2. clay_discovery ➔ crm_lookup ➔ clay_enrichment ➔ clay_signal ➔ scoring ➔ draft_outreach ➔ routing ➔ send_outreach ➔ crm_sync
+3. engagement_tracking (account based marketing) ➔ crm_lookup (active status/issues) ➔ scoring ➔ draft_outreach (upsell) ➔ routing ➔ send_outreach ➔ crm_sync
+4. churn_detection ➔ crm_lookup ➔ draft_outreach ➔ routing ➔ send_outreach ➔ crm_sync
+
+

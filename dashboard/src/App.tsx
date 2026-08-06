@@ -3,9 +3,11 @@ import { api, plural, type SearchHit } from "./api";
 import { useAsync } from "./components";
 import { Rail, type Selection } from "./Rail";
 import { Briefing } from "./panes/Briefing";
+import { Department } from "./panes/Department";
 import { Orchestration } from "./panes/Orchestration";
 import { SystemMap } from "./panes/SystemMap";
 import { Spend } from "./panes/Spend";
+import { activeTabKey, tabsFor } from "./tabs";
 import { useTheme, type Theme } from "./theme";
 import { needsAttention } from "./vocabulary";
 
@@ -22,6 +24,9 @@ export default function App() {
 
   const { data: rowData, error: rowError } = useAsync(() => api.orchestrations(), [], 4000);
   const { data: depts } = useAsync(() => api.departments(), [], 15000);
+  // Config-derived rather than registry-derived, so it changes only when someone
+  // edits the playbook and restarts. A slow poll is the honest cadence.
+  const { data: flows } = useAsync(() => api.flows(), [], 60000);
 
   const rows = useMemo(() => rowData ?? [], [rowData]);
 
@@ -72,12 +77,38 @@ export default function App() {
 
   const unreachable = depts?.unreachable ?? [];
   const deptCount = depts?.departments.length ?? 0;
-  const agentCount = depts?.departments.reduce((sum, d) => sum + d.agents.length, 0) ?? 0;
+
+  const tabs = tabsFor(depts);
+  const activeTab = activeTabKey(selection);
+
+  // The map and the department panes are whole-screen views. The rail is Home's
+  // instrument -- a list of orchestrations -- and keeping it beside a constellation
+  // or a set of trigger buttons is a column of the wrong question. Unmounted rather
+  // than hidden, so nothing behind the pane keeps polling.
+  const railHidden = selection.kind === "map" || selection.kind === "department";
+  // Under 900px the pane is a fixed overlay that only `detail-open` reveals, so a
+  // whole-screen tab has to open it the same way an orchestration does.
+  const detailOpen = selection.kind === "orchestration" || railHidden;
 
   return (
-    <div className={`console${selection.kind === "orchestration" ? " detail-open" : ""}`}>
+    <div
+      className={`console${detailOpen ? " detail-open" : ""}${railHidden ? " rail-collapsed" : ""}`}
+    >
       <header className="systembar">
         <h1 className="wordmark">NexusGTM</h1>
+        <nav className="tabs" aria-label="Sections">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              className={`tab${tab.down ? " down" : ""}`}
+              aria-current={activeTab === tab.key}
+              onClick={() => setSelection(tab.selection)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
         <span className="spacer" />
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
         {depts && (
@@ -95,19 +126,20 @@ export default function App() {
         )}
       </header>
 
-      <Rail
-        rows={filtered}
-        term={term}
-        onTerm={setTerm}
-        onSearch={setQuery}
-        searchHits={hits}
-        searchError={searchError}
-        selection={selection}
-        onSelect={setSelection}
-        spendToday={spendToday}
-        attentionCount={attentionCount}
-        agentCount={agentCount}
-      />
+      {!railHidden && (
+        <Rail
+          rows={filtered}
+          term={term}
+          onTerm={setTerm}
+          onSearch={setQuery}
+          searchHits={hits}
+          searchError={searchError}
+          selection={selection}
+          onSelect={setSelection}
+          spendToday={spendToday}
+          attentionCount={attentionCount}
+        />
+      )}
 
       <main className="pane" aria-live="polite">
         <div className={`pane-inner${selection.kind === "map" ? " is-map" : ""}`}>
@@ -142,6 +174,14 @@ export default function App() {
             <Spend />
           ) : selection.kind === "map" ? (
             <SystemMap depts={depts} rows={rows} />
+          ) : selection.kind === "department" ? (
+            <Department
+              id={selection.id}
+              depts={depts}
+              flows={flows}
+              rows={rows}
+              onOpen={openOrchestration}
+            />
           ) : (
             <Orchestration id={selection.id} depts={depts} />
           )}

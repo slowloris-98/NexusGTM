@@ -11,6 +11,8 @@ export type OrchestrationCore = {
   crm_reference_id: string;
   status: string;
   outcome: string | null;
+  /** The playbook flow the run started under. Null for runs predating flows. */
+  flow: string | null;
   started_at: string;
   finished_at: string | null;
   final_result: unknown;
@@ -47,6 +49,8 @@ export type Decision = {
   chosen_agent: string | null;
   rationale: string;
   candidates_considered: string[] | null;
+  /** The flow in force at this step, which is not always the one the run began on. */
+  flow: string | null;
   timestamp: string;
 };
 
@@ -108,6 +112,51 @@ export type SearchHit = Run & {
   outcome: string | null;
 };
 
+/** What a department's trigger button collects before it can start a run. */
+export type TriggerInput = {
+  kind: "lead" | "brief" | "account" | "none";
+  seed: Record<string, unknown>;
+};
+
+export type Trigger = {
+  department: string;
+  label: string;
+  description: string;
+  entry_agent: string;
+  input: TriggerInput;
+  reference_prefix: string;
+};
+
+/** GET /flows. `trigger` is null for a flow with no button of its own. */
+export type Flow = {
+  id: string;
+  label: string;
+  when: string;
+  goal: string;
+  default: boolean;
+  trigger: Trigger | null;
+};
+
+export type Flows = { flows: Flow[] };
+
+export type LaunchBody = {
+  crm_reference_id?: string;
+  flow?: string;
+  lead?: Record<string, unknown>;
+  brief?: string;
+  seed?: Record<string, unknown>;
+};
+
+export type LaunchResult = {
+  orchestration_id: string;
+  status: string;
+  outcome: string | null;
+  flow?: string | null;
+  steps?: number;
+  total_cost_usd?: number;
+  error?: string;
+};
+
 const BASE = "/api";
 
 async function get<T>(path: string): Promise<T> {
@@ -116,12 +165,37 @@ async function get<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+/**
+ * The only write in the console. Failures arrive as FastAPI's {detail: …}, and
+ * surfacing that is the difference between showing "422" and showing "run requires
+ * a lead, a brief, a seed payload, or a flow that declares its own seed" — which is
+ * the whole reason the orchestrator's ValueError says something a person can read.
+ */
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const detail = (await response.json().catch(() => null)) as { detail?: unknown } | null;
+    throw new Error(
+      typeof detail?.detail === "string"
+        ? detail.detail
+        : `${response.status} ${response.statusText}`,
+    );
+  }
+  return response.json() as Promise<T>;
+}
+
 export const api = {
   orchestrations: () => get<Orchestration[]>("/orchestrations"),
   orchestration: (id: string) => get<OrchestrationDetail>(`/orchestrations/${id}`),
   costs: () => get<Costs>("/costs"),
   departments: () => get<Departments>("/departments"),
+  flows: () => get<Flows>("/flows"),
   search: (q: string) => get<SearchHit[]>(`/search?q=${encodeURIComponent(q)}`),
+  launch: (body: LaunchBody) => post<LaunchResult>("/orchestrations", body),
 };
 
 /**

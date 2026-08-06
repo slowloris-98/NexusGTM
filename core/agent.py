@@ -17,7 +17,7 @@ from core.llm import LLMResult
 
 
 class Spender:
-    """Per-invocation LLM handle that accumulates this agent's cost events.
+    """Per-invocation spend handle that accumulates this agent's cost events.
 
     Cost is collected per call rather than stored on the agent, which is what
     keeps agents stateless and safe under concurrent tool calls.
@@ -35,6 +35,18 @@ class Spender:
             CostEvent(self.department, self.agent, result.cost_usd).to_dict()
         )
         return result
+
+    def record_external(self, amount_usd: float) -> None:
+        """Record spend that did not come from an LLM call.
+
+        Vendor calls cost real money -- Clay bills credits -- and the budget
+        guardrail halts on a total, not on a token count. Without this, an agent
+        could burn a vendor quota and report a spend of zero. Priced by the
+        caller, because only the caller knows the vendor's unit.
+        """
+        self.events.append(
+            CostEvent(self.department, self.agent, float(amount_usd)).to_dict()
+        )
 
 
 class Agent(ABC):

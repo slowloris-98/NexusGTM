@@ -90,7 +90,21 @@
       "Bash(python -c \"import json,sys; print\\(list\\(json.load\\(sys.stdin\\)['paths']\\)\\)\")",
       "Bash(curl -s -m 5 http://127.0.0.1:8000/orchestrations)",
       "Bash(curl -s -m 8 http://127.0.0.1:8000/departments)",
-      "Bash(node \"C:/Users/atrey/AppData/Local/Temp/claude/d--Atreya-College-Projects-NexusGTM/41885e05-c7be-4c09-a2af-1869e1b8c286/scratchpad/shoot.mjs\")"
+      "Bash(node \"C:/Users/atrey/AppData/Local/Temp/claude/d--Atreya-College-Projects-NexusGTM/41885e05-c7be-4c09-a2af-1869e1b8c286/scratchpad/shoot.mjs\")",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest -q 2>&1)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe \"C:\\\\Users\\\\atrey\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Atreya-College-Projects-NexusGTM\\\\10620a58-e030-4f76-b82d-85b2869f1d29\\\\scratchpad\\\\check_registry.py\")",
+      "PowerShell(Start-Process -FilePath \".venv\\\\Scripts\\\\python.exe\" -ArgumentList \"-m\",\"departments.marketing.server\" -WindowStyle Hidden)",
+      "PowerShell(Start-Process -FilePath \".venv\\\\Scripts\\\\python.exe\" -ArgumentList \"-m\",\"departments.revops.server\" -WindowStyle Hidden)",
+      "PowerShell(Start-Process -FilePath \".venv\\\\Scripts\\\\python.exe\" -ArgumentList \"-m\",\"departments.sales.server\" -WindowStyle Hidden)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe \"C:\\\\Users\\\\atrey\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Atreya-College-Projects-NexusGTM\\\\10620a58-e030-4f76-b82d-85b2869f1d29\\\\scratchpad\\\\check_prompt.py\")",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe \"C:\\\\Users\\\\atrey\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Atreya-College-Projects-NexusGTM\\\\10620a58-e030-4f76-b82d-85b2869f1d29\\\\scratchpad\\\\one_run.py\")",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe \"C:\\\\Users\\\\atrey\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Atreya-College-Projects-NexusGTM\\\\10620a58-e030-4f76-b82d-85b2869f1d29\\\\scratchpad\\\\check_sync.py\")",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest --collect-only -q 2>&1 | Select-String -Pattern '::' | Group-Object { \\($_ -split '::'\\)[0] } | Select-Object Count, Name | Format-Table -AutoSize)",
+      "WebFetch(domain:developers.clay.com)",
+      "WebSearch",
+      "WebFetch(domain:university.clay.com)",
+      "WebFetch(domain:docs.clay.com)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_clay_agents.py -q)"
     ]
   }
 }

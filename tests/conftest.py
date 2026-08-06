@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from core import llm as llm_module
+from core.agent import Spender
 from core.llm import LLMResult
 from core.registry import AgentSpec
 from store import db
@@ -12,6 +14,20 @@ def conn(tmp_path):
     connection = db.init_db(tmp_path / "test.db")
     yield connection
     connection.close()
+
+
+@pytest.fixture
+def spender(monkeypatch):
+    """A real Spender with the provider call stubbed.
+
+    Agents that call an LLM as part of their work still need one, and patching
+    `core.llm.llm_call` through the module is the single patch point the whole
+    suite uses.
+    """
+    monkeypatch.setattr(
+        llm_module, "llm_call", lambda prompt, **kwargs: result(parsed={})
+    )
+    return Spender("revops", "test")
 
 
 @pytest.fixture

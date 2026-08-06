@@ -7,10 +7,14 @@ export type Selection =
   | { kind: "briefing" }
   | { kind: "spend" }
   | { kind: "map" }
+  | { kind: "department"; id: string }
   | { kind: "orchestration"; id: string };
 
+/** Compares on kind, then on id when the variant carries one. Written this way
+ *  rather than casting to a single id-bearing variant, now that there are two. */
 export const sameSelection = (a: Selection, b: Selection) =>
-  a.kind === b.kind && (a.kind !== "orchestration" || a.id === (b as typeof a).id);
+  a.kind === b.kind &&
+  (!("id" in a) || !("id" in b) || a.id === b.id);
 
 function Row({
   row,
@@ -81,7 +85,6 @@ export function Rail({
   onSelect,
   spendToday,
   attentionCount,
-  agentCount,
 }: {
   rows: Orchestration[];
   term: string;
@@ -93,7 +96,6 @@ export function Rail({
   onSelect: (next: Selection) => void;
   spendToday: number | null;
   attentionCount: number;
-  agentCount: number;
 }) {
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -178,6 +180,8 @@ export function Rail({
                   </span>
                 )}
               </button>
+              {/* Map moved to the system bar, where it is one of the whole-screen
+                  tabs. A rail row for it would be a second door to the same room. */}
               <button
                 type="button"
                 className="rail-row pinned"
@@ -187,17 +191,6 @@ export function Rail({
                 Spend
                 {spendToday != null && (
                   <span className="trailing">{usd(spendToday)}</span>
-                )}
-              </button>
-              <button
-                type="button"
-                className="rail-row pinned"
-                aria-current={selection.kind === "map"}
-                onClick={() => onSelect({ kind: "map" })}
-              >
-                Map
-                {agentCount > 0 && (
-                  <span className="trailing">{plural(agentCount, "agent")}</span>
                 )}
               </button>
             </Section>

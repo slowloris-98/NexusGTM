@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS orchestrations (
     status           TEXT NOT NULL,          -- running | completed | halted_budget
                                              -- halted_steps | halted_loop | no_agent | failed
     outcome          TEXT,                   -- qualified | disqualified | failed
+    flow             TEXT,                   -- the playbook flow it started under
     started_at       TEXT NOT NULL,
     finished_at      TEXT,
     final_result     TEXT,                   -- JSON
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     chosen_agent          TEXT,
     rationale             TEXT NOT NULL,
     candidates_considered TEXT,              -- JSON
+    flow                  TEXT,              -- the flow in force at this step
     timestamp             TEXT NOT NULL
 );
 

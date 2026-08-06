@@ -26,9 +26,31 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     return conn
 
 
+# Columns added to tables that already ship in existing databases. CREATE TABLE
+# IF NOT EXISTS silently does nothing to a table that exists, so a column added to
+# schema.sql alone would never reach a store that has already been created.
+_ADDED_COLUMNS = (
+    ("orchestrations", "flow", "TEXT"),
+    ("decisions", "flow", "TEXT"),
+)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add missing nullable columns in place.
+
+    Adding a nullable column is the one schema change SQLite does without
+    rebuilding the table, which is why every entry here must stay nullable.
+    """
+    for table, column, decl in _ADDED_COLUMNS:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
 def init_db(path: str | Path | None = None) -> sqlite3.Connection:
-    """Create the schema if absent and return an open connection."""
+    """Create the schema if absent, migrate it if stale, return an open connection."""
     conn = connect(path)
     conn.executescript(_SCHEMA.read_text(encoding="utf-8"))
+    _migrate(conn)
     conn.commit()
     return conn

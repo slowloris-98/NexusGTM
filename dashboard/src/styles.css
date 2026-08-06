@@ -125,6 +125,16 @@ body {
     "rail pane";
 }
 
+/* Live Map and the department panes are whole-screen views, so the rail stands
+   down and the pane takes the full width. A class, not a media query: the two
+   structural breakpoints below stay the only two. */
+.console.rail-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "bar"
+    "pane";
+}
+
 .systembar {
   grid-area: bar;
   display: flex;
@@ -135,14 +145,75 @@ body {
   background: var(--page);
 }
 
+/* 15px, not larger: a pane h1 is 20px, and a wordmark louder than the title of
+   what you are reading inverts the hierarchy. `flex: none` because the tab strip
+   beside it may overflow, and the product's name must not be what gives way. */
 .systembar .wordmark {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.045em;
   text-transform: uppercase;
   color: var(--text-primary);
   margin: 0;
+  flex: none;
   white-space: nowrap;
+}
+
+/* Navigation, not chrome, so it sits beside the wordmark rather than out at the
+   quiet end of the bar. It scrolls rather than wraps: the bar is exactly one
+   --bar-height row, and a second line of departments would change the chassis. */
+.systembar .tabs {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.systembar .tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* Borrows the map chip's hairline idiom: reacts in colour, never fills. A filled
+   tab would be the loudest thing in a bar whose job is to stay quiet. The active
+   marker sits ON the bar's own rule rather than above it, so an inactive tab
+   leaves the hairline unbroken and the active one replaces that 1px with 2px. */
+.systembar .tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font: inherit;
+  font-size: 12px;
+  padding: 0 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.systembar .tab:hover {
+  color: var(--text-primary);
+}
+
+.systembar .tab[aria-current="true"] {
+  color: var(--text-primary);
+  border-bottom-color: var(--series-1);
+}
+
+/* A department whose server is not answering keeps its tab and loses its weight.
+   Severing beats deleting -- a tab that vanishes reads as a bug, not an outage. */
+.systembar .tab.down {
+  color: var(--muted);
+}
+
+.systembar .tab:focus-visible {
+  outline-offset: -4px;
 }
 
 .systembar .spacer {
@@ -867,6 +938,161 @@ pre.payload {
   to {
     background-position: -200% 0;
   }
+}
+
+/* ------------------------------------------------------------- department */
+
+/* The console's one action button. Promoted out of .map-chip rather than copied
+   from it, now that the hairline-on-a-lifted-surface idiom has more than one
+   home: reacts in colour, never fills. */
+.action {
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  cursor: pointer;
+  flex: none;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.action:hover:not(:disabled) {
+  border-color: var(--series-1);
+  color: var(--series-1);
+}
+
+/* Working, not absent. The label already says "Running…", so the button dims
+   rather than disappearing -- the reader needs to see that the thing they
+   pressed is the thing that is busy. */
+.action:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.triggers {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.trigger {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 62ch;
+}
+
+.trigger-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trigger-head .who {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.trigger-head .gloss {
+  margin: 0;
+  font-size: 12px;
+}
+
+.trigger-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trigger-fields input,
+.trigger-fields textarea {
+  font: inherit;
+  font-size: 13px;
+  flex: 1 1 14ch;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.trigger-fields textarea {
+  flex-basis: 100%;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.trigger-fields input::placeholder,
+.trigger-fields textarea::placeholder {
+  color: var(--muted);
+}
+
+.trigger-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.trigger-foot .gloss {
+  margin: 0;
+  font-size: 12px;
+}
+
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plain-list .who {
+  display: block;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.plain-list .gloss {
+  display: block;
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.plain-list .sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* A row that reads as text and behaves as a button. No underline until hover:
+   a list where every line is underlined reads as a link farm, not a list. */
+.linkish {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  display: block;
+  width: 100%;
+}
+
+.linkish:hover .who {
+  color: var(--series-1);
 }
 
 .fault-note {

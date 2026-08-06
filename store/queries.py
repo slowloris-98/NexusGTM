@@ -36,12 +36,14 @@ def _row(r: sqlite3.Row, json_fields: tuple[str, ...] = ()) -> dict:
 
 # --------------------------------------------------------------------------- writes
 
-def create_orchestration(conn: sqlite3.Connection, crm_reference_id: str) -> str:
+def create_orchestration(
+    conn: sqlite3.Connection, crm_reference_id: str, *, flow: str | None = None
+) -> str:
     oid = str(uuid.uuid4())
     conn.execute(
-        "INSERT INTO orchestrations (id, crm_reference_id, status, started_at) "
-        "VALUES (?, ?, 'running', ?)",
-        (oid, crm_reference_id, _now()),
+        "INSERT INTO orchestrations (id, crm_reference_id, flow, status, started_at) "
+        "VALUES (?, ?, ?, 'running', ?)",
+        (oid, crm_reference_id, flow, _now()),
     )
     conn.commit()
     return oid
@@ -131,16 +133,18 @@ def record_decision(
     chosen_agent: str | None,
     rationale: str,
     candidates_considered: Any,
+    flow: str | None = None,
 ) -> None:
     conn.execute(
         "INSERT INTO decisions (orchestration_id, step_no, chosen_agent, rationale, "
-        "candidates_considered, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+        "candidates_considered, flow, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (
             orchestration_id,
             step_no,
             chosen_agent,
             rationale,
             _dumps(candidates_considered),
+            flow,
             _now(),
         ),
     )

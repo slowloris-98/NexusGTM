@@ -13,13 +13,14 @@ dependencies = [
     "pyyaml>=6.0",
     "jsonschema>=4.23",
     "python-dotenv>=1.0",
+    # Runtime now, not just tests: the RevOps department calls Clay and HubSpot.
+    "httpx>=0.28",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
-    "httpx>=0.28",
 ]
 
 [tool.pytest.ini_options]

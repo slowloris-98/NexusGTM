@@ -62,6 +62,33 @@ def price_of(model: str, input_tokens: int, output_tokens: int) -> float:
     ) / 1_000_000
 
 
+def _strictify(node: Any) -> Any:
+    """Apply strict mode's object rules at every depth, not just the top.
+
+    Strict mode wants `required` and `additionalProperties: false` on *every*
+    object in the schema, including ones nested inside a property or an array's
+    `items`. Missing it on a nested object fails the request with an error naming
+    a JSON path rather than the agent, which is a slow thing to debug from a run
+    that has already spent money getting there.
+
+    A nested object that declares no properties is left alone. It cannot be
+    expressed in strict mode at all -- there is nothing to put in `required` --
+    so the honest options are to declare its shape or to keep it out of an output
+    schema. Several schemas here are documentation for outputs assembled in
+    Python and never sent to a provider; rewriting those is not this function's
+    business.
+    """
+    if isinstance(node, dict):
+        out = {k: _strictify(v) for k, v in node.items()}
+        if out.get("type") == "object" and out.get("properties"):
+            out.setdefault("required", list(out["properties"]))
+            out["additionalProperties"] = False
+        return out
+    if isinstance(node, list):
+        return [_strictify(item) for item in node]
+    return node
+
+
 def strict_schema(name: str, properties: dict, required: list[str] | None = None) -> dict:
     """Build a Responses API json_schema format block.
 
@@ -75,7 +102,7 @@ def strict_schema(name: str, properties: dict, required: list[str] | None = None
         "strict": True,
         "schema": {
             "type": "object",
-            "properties": properties,
+            "properties": _strictify(properties),
             "required": required if required is not None else list(properties),
             "additionalProperties": False,
         },

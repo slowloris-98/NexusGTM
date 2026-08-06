@@ -7,10 +7,12 @@ and every run is bounded by a cost budget, a step ceiling, and loop detection.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
 import sqlite3
+from datetime import datetime, timezone
 from typing import TypedDict
 
 import jsonschema
@@ -43,6 +45,14 @@ class State(TypedDict, total=False):
     pending: dict | None
     agents: list[AgentSpec]
     unreachable: list[dict]
+    # The flow in force. Advisory: it labels the planner's judgment and narrows
+    # what the prompt spends tokens on. Nothing in the graph dispatches on it.
+    flow: str | None
+    # The ceilings actually in force for this run, resolved once in `run` from the
+    # flow's overrides. They live in state rather than on the instance because the
+    # flow is not known until a run starts, and the instance is shared.
+    max_steps: int
+    budget_usd: float
 
 
 def _fingerprint(agent: str, payload: dict) -> str:
@@ -72,8 +82,9 @@ class Orchestrator:
             history=state["history"],
             step_no=step_no,
             total_cost_usd=state["total_cost_usd"],
-            budget_usd=self.budget_usd,
+            budget_usd=state["budget_usd"],
             observation=state.get("observation"),
+            flow=state.get("flow"),
         )
 
         try:
@@ -86,6 +97,7 @@ class Orchestrator:
                 chosen_agent=None,
                 rationale=f"planner failed: {exc}",
                 candidates_considered=[s.agent for s in state["agents"]],
+                flow=state.get("flow"),
             )
             return {"step_no": step_no, "status": "failed", "pending": None}
 
@@ -95,13 +107,16 @@ class Orchestrator:
             oid, PLANNER_DEPARTMENT, PLANNER_AGENT, result.cost_usd
         )
 
+        flow, flow_note = self._resolve_flow(state.get("flow"), decision.get("flow"))
+
         queries.record_decision(
             self.conn,
             oid,
             step_no=step_no,
             chosen_agent=decision.get("chosen_agent"),
-            rationale=decision.get("rationale", ""),
+            rationale=decision.get("rationale", "") + flow_note,
             candidates_considered=decision.get("candidates_considered", []),
+            flow=flow,
         )
 
         total = self.meter.total_for(oid)
@@ -115,6 +130,7 @@ class Orchestrator:
                 "outcome": decision.get("outcome") if finished else None,
                 "pending": None,
                 "observation": None,
+                "flow": flow,
             }
 
         spec = registry_lookup(state["agents"], decision["chosen_agent"])
@@ -129,6 +145,7 @@ class Orchestrator:
                 ),
                 "pending": None,
                 "retries": state.get("retries", 0) + 1,
+                "flow": flow,
             }
 
         return {
@@ -137,7 +154,24 @@ class Orchestrator:
             "status": "running",
             "observation": None,
             "pending": {"spec": spec, "payload": decision.get("input_payload") or {}},
+            "flow": flow,
         }
+
+    @staticmethod
+    def _resolve_flow(current: str | None, named: str | None) -> tuple[str | None, str]:
+        """Take the planner's flow label, or keep the current one. Never re-plans.
+
+        An unknown *agent* is a dispatch failure that costs nothing to correct, so
+        it earns a re-plan. An unknown *flow* is a mislabelled decision whose agent
+        choice may be perfectly good, and buying a whole extra planner call to fix
+        a label is not worth it. The note lands in the rationale, so the decision
+        trail still shows what was asked for.
+        """
+        if not named or named == current:
+            return current, ""
+        if planner.flow_by_id(named) is not None:
+            return named, ""
+        return current, f" [ignored unknown flow {named!r}; stayed on {current!r}]"
 
     async def _invoke(self, state: State) -> dict:
         oid = state["orchestration_id"]
@@ -174,6 +208,8 @@ class Orchestrator:
                     total_cost_usd=state["total_cost_usd"],
                     step_no=state["step_no"],
                     retries=retries,
+                    max_steps=state["max_steps"],
+                    budget_usd=state["budget_usd"],
                 ),
                 "pending": None,
                 "retries": retries,
@@ -214,6 +250,8 @@ class Orchestrator:
                     total_cost_usd=state["total_cost_usd"],
                     step_no=state["step_no"],
                     retries=retries,
+                    max_steps=state["max_steps"],
+                    budget_usd=state["budget_usd"],
                 ),
                 "pending": None,
                 "retries": retries,
@@ -247,7 +285,11 @@ class Orchestrator:
 
         return {
             "status": self._guardrail_status(
-                total_cost_usd=total, step_no=state["step_no"], retries=retries
+                total_cost_usd=total,
+                step_no=state["step_no"],
+                retries=retries,
+                max_steps=state["max_steps"],
+                budget_usd=state["budget_usd"],
             ),
             "pending": None,
             "blackboard": blackboard,
@@ -268,11 +310,23 @@ class Orchestrator:
 
     # ------------------------------------------------------------------ edges
 
-    def _guardrail_status(self, *, total_cost_usd: float, step_no: int, retries: int) -> str:
-        """The halt table. Returns 'running' when the orchestration may continue."""
-        if total_cost_usd > self.budget_usd:
+    def _guardrail_status(
+        self,
+        *,
+        total_cost_usd: float,
+        step_no: int,
+        retries: int,
+        max_steps: int,
+        budget_usd: float,
+    ) -> str:
+        """The halt table. Returns 'running' when the orchestration may continue.
+
+        The ceilings arrive from state rather than from `self`, because a flow may
+        raise or lower them and the instance is resolved before any flow is known.
+        """
+        if total_cost_usd > budget_usd:
             return "halted_budget"
-        if step_no >= self.max_steps:
+        if step_no >= max_steps:
             return "halted_steps"
         if retries > 2:
             return "failed"
@@ -303,7 +357,65 @@ class Orchestrator:
 
     # ------------------------------------------------------------------- run
 
-    async def run(self, crm_reference_id: str, lead: dict) -> dict:
+    async def run(
+        self,
+        crm_reference_id: str | None = None,
+        lead: dict | None = None,
+        brief: str | None = None,
+        *,
+        flow: str | None = None,
+        seed: dict | None = None,
+    ) -> dict:
+        """Start an orchestration under a named flow.
+
+        A run needs something to reason about, but not necessarily a lead: an
+        outbound run has only a brief and sourcing produces the lead, and a
+        campaign run has neither -- its flow declares a seed instead. Seeding the
+        blackboard with whatever was supplied keeps the entry point single and the
+        first move a planner decision.
+        """
+        flow_id = flow or planner.default_flow_id()
+        flow_def = planner.flow_by_id(flow_id)
+        if flow and flow_def is None:
+            # Unlike a mid-run flow label, this is a caller contract violation, not
+            # a planner judgment. api.main already maps ValueError to a 422.
+            declared = ", ".join(f["id"] for f in planner.flows()) or "(none declared)"
+            raise ValueError(f"unknown flow {flow!r}; declared flows: {declared}")
+
+        trigger = (flow_def or {}).get("trigger") or {}
+
+        # Merge order: the flow's declared seed, then the caller's, then the lead
+        # and brief. The caller is more specific than the config, and lead/brief
+        # are named keys that nothing else may shadow.
+        blackboard: dict = copy.deepcopy((trigger.get("input") or {}).get("seed") or {})
+        if seed:
+            blackboard.update(copy.deepcopy(seed))
+        if lead is not None:
+            blackboard["lead"] = lead
+        if brief:
+            blackboard["icp_brief"] = brief
+
+        if not blackboard:
+            raise ValueError(
+                "run requires a lead, a brief, a seed payload, or a flow that "
+                "declares its own seed"
+            )
+
+        if not crm_reference_id:
+            # A campaign or discovery run has no account until an agent produces
+            # one, but the store keys everything on this and the rail prints it. A
+            # readable, time-ordered placeholder beats a UUID nobody can say aloud.
+            prefix = (trigger.get("reference_prefix") or flow_id or "RUN").upper()
+            crm_reference_id = f"{prefix}-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}"
+
+        # Precedence: flow override > instance attribute > the playbook's global
+        # guardrails block, which __init__ already resolved onto the instance.
+        # scripts/seed.py and the guardrail tests stage a run by assigning the
+        # attribute and declare no flow, so they land in the middle branch.
+        overrides = (flow_def or {}).get("guardrails") or {}
+        max_steps = int(overrides.get("max_steps", self.max_steps))
+        budget_usd = float(overrides.get("budget_usd", self.budget_usd))
+
         discovery = await registry.discover()
         if discovery.unreachable:
             log.warning(
@@ -311,12 +423,12 @@ class Orchestrator:
                 [d["id"] for d in discovery.unreachable],
             )
 
-        oid = queries.create_orchestration(self.conn, crm_reference_id)
+        oid = queries.create_orchestration(self.conn, crm_reference_id, flow=flow_id)
 
         initial: State = {
             "orchestration_id": oid,
             "crm_reference_id": crm_reference_id,
-            "blackboard": {"lead": lead},
+            "blackboard": blackboard,
             "step_no": 0,
             "history": [],
             "total_cost_usd": 0.0,
@@ -328,11 +440,14 @@ class Orchestrator:
             "pending": None,
             "agents": discovery.agents,
             "unreachable": discovery.unreachable,
+            "flow": flow_id,
+            "max_steps": max_steps,
+            "budget_usd": budget_usd,
         }
 
         try:
             final = await self.graph.ainvoke(
-                initial, config={"recursion_limit": self.max_steps * 4}
+                initial, config={"recursion_limit": max_steps * 4}
             )
         except Exception as exc:
             log.exception("orchestration %s crashed", oid)
@@ -359,6 +474,8 @@ class Orchestrator:
             "outcome": outcome,
             "steps": final.get("step_no", 0),
             "total_cost_usd": self.meter.total_for(oid),
+            # The flow it ended on, which is not always the one it started under.
+            "flow": final.get("flow", flow_id),
         }
 
 
