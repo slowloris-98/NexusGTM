@@ -39,10 +39,16 @@ sourcing:
 
 # How far back a monitored event still counts as a signal, and how many phrases
 # any one category may contribute. Rendered into clay_enrich's normaliser, which
-# turns Clay's raw job/funding/news/technology columns into short phrases. Not
-# read as a default in code -- a literal in the agent would be the duplicated
-# constant this file exists to remove. Raising recency_days costs nothing extra;
-# it only changes what clay_enrich is willing to call recent.
+# turns Clay's raw signal columns into short phrases. Not read as a default in
+# code -- a literal in the agent would be the duplicated constant this file
+# exists to remove. Raising recency_days costs nothing extra; it only changes
+# what clay_enrich is willing to call recent.
+#
+# Neither reaches all four columns. recency_days applies to latest_funding and
+# recent_news, the two that carry a date; max_per_category to recent_news and
+# technologies. job_postings publishes a count rather than titles precisely
+# because no posted date is mapped, so no window could filter it -- see
+# _job_phrases.
 signals:
   recency_days: 180
   max_per_category: 3

@@ -106,37 +106,55 @@ cd dashboard && npm install && cd ..
 ```
 
 To run the Clay and HubSpot agents live, also set `CLAY_API_KEY`, `CLAY_ENRICH_ROUTINE_ID`,
-and `HUBSPOT_ACCESS_TOKEN` in `.env`. Routine ids come from your own Clay workspace —
-routines are workspace-defined, which is also why `_pluck` in
-[departments/revops/clay.py](departments/revops/clay.py) reads several plausible column
-names. Leave them unset and those agents return `status="error"`, which the planner treats
-as an observation and re-plans around; the rest of the system still runs.
+and `HUBSPOT_ACCESS_TOKEN` in `.env`. Routine ids come from your own Clay workspace. Leave
+them unset and those agents return `status="error"`, which the planner treats as an
+observation and re-plans around; the rest of the system still runs.
 
 ### The Clay function
 
 Build **one** Function in your workspace, with a text input named `Domain`. `clay_enrich`
-also sends `company` and `email`, which give the waterfall more to match on. Its output
-columns:
+also sends `company` and `email`, which give the waterfall more to match on.
+
+The **firmographic** columns are read through aliases, because Clay's own "Enrich Company"
+titles vary between workspaces:
 
 | Column | Contents |
 | --- | --- |
 | `Company Name` | string — **required**; its absence is what the agent reads as a miss |
-| `Domain`, `Industry`, `Revenue Band`, `HQ Region` | string |
+| `Domain`, `Industry`, `Annual Revenue`, `HQ Region` | string |
 | `Employee Count` | number or text — `"1,200"` and `"500+"` both parse |
-| `Job Openings` | list of `{title, posted_at}`, list of titles, or a plain count |
-| `Latest Funding` | `{amount, round, date}`, or a list of rounds |
-| `Recent News` | list of `{title, date}` or list of headlines |
-| `Technologies` | list of names, list of `{name}`, or a comma-joined string |
 
-Column names are matched on letters and digits only, so `Employee Count`, `employee_count`,
-and `employeeCount` are the same column. Do **not** add an AI column that synthesises those
-into a signals string — that is the token limit, and the agent does it in Python. (If your
-workspace already has one, name it `Signals` and its contents lead the phrase list.) Copy
-the `function:t_...` id from the Function's own page into `CLAY_ENRICH_ROUTINE_ID`.
+The four **signal** columns are not. Each is read by one function in
+[departments/revops/clay.py](departments/revops/clay.py) that names its fields exactly once,
+so the output columns must be named as below and carry these shapes:
+
+| Column | Shape | Fields read |
+| --- | --- | --- |
+| `job_postings` | `{total jobs found, Jobs: [...]}` | `total jobs found` only |
+| `latest_funding` | flat object | `Funding Stage`, `Latest Funding Amount`, `Last Funding Date` |
+| `recent_news` | `{News: [...]}` | `News Title`, `Publish Date` |
+| `technologies` | `{Products: [{...}]}` | `Product Name`, or `Product Names` as a fallback |
+
+Names are matched on letters and digits only, so `Employee Count`, `employee_count` and
+`employeeCount` are the same column — but only one name per field is tried. **If a signal
+column is named anything else, it reads as no data at all.** That is not hypothetical: it is
+how all four sat dead behind an empty `buying_signals` until someone compared a real response
+against the code. A column the routine does not send is now reported in
+`clay_enrichment.reason` for exactly that reason; a column the *provider* has no record for
+("No company with that domain found") is a real miss and stays silent.
+
+`job_postings` publishes a count rather than job titles, deliberately — see `_job_phrases`.
+If your jobs enrichment exposes a posted date, map it and titles become defensible again.
+
+Do **not** add an AI column that synthesises these into a signals string — that is the token
+limit, and the agent does it in Python. (If your workspace already has a hand-written one,
+name it `Signals`; it stays shape-tolerant and leads the phrase list.) Copy the
+`function:t_...` id from the Function's own page into `CLAY_ENRICH_ROUTINE_ID`.
 
 How far back an event still counts, and how many phrases a category may contribute, are
 policy: `signals.recency_days` and `signals.max_per_category` in
-[config/playbook.yaml](config/playbook.yaml).
+[config/playbook.yaml](config/playbook.yaml). Neither reaches every column — the file's own
+comment says which.
 
 `CRM_WRITE_ENABLED` is off by default, so `crm_sync` returns the payload it *would* have
 written with `dry_run: true`. Turn it on only against a HubSpot sandbox portal first — a
