@@ -46,12 +46,29 @@ class VendorError(RuntimeError):
 
 
 def _request(
-    client: httpx.Client, method: str, path: str, vendor: str, **kwargs: Any
-) -> dict:
+    client: httpx.Client,
+    method: str,
+    path: str,
+    vendor: str,
+    *,
+    absent_status: int | None = None,
+    **kwargs: Any,
+) -> dict | None:
+    """Send one request and map every vendor failure onto a legible VendorError.
+
+    `absent_status` names a status that means "no such thing" rather than
+    "something went wrong", and turns it into None -- HubSpot answers 404 when
+    asked for a property a portal does not have, which is the question
+    `scripts/hubspot_setup.py` needs to ask before creating one. Without it
+    passed, this only ever returns a dict.
+    """
     try:
         response = client.request(method, path, **kwargs)
     except httpx.HTTPError as exc:
         raise VendorError(f"{vendor} {method} {path} failed: {exc}") from exc
+
+    if absent_status is not None and response.status_code == absent_status:
+        return None
 
     if response.status_code == 401 or response.status_code == 403:
         raise VendorError(
@@ -287,6 +304,60 @@ class HubspotClient:
                 "HubSpot",
                 json={"properties": properties},
             )
+
+    def get_property(self, object_type: str, name: str) -> dict | None:
+        """The property definition, or None when this portal has no such property.
+
+        A 404 here is an answer, not a failure: it is how `hubspot_setup` decides
+        whether to create one. Same shape as `search` returning None for no match.
+        """
+        with self._client() as client:
+            return _request(
+                client,
+                "GET",
+                f"/crm/v3/properties/{object_type}/{name}",
+                "HubSpot",
+                absent_status=404,
+            )
+
+    def create_property(self, object_type: str, spec: dict) -> dict:
+        """Define a custom property. Needs the crm.schemas.<object>.write scope."""
+        with self._client() as client:
+            return _request(
+                client,
+                "POST",
+                f"/crm/v3/properties/{object_type}",
+                "HubSpot",
+                json=spec,
+            )
+
+    def get_property_group(self, object_type: str, name: str) -> dict | None:
+        """The group definition, or None when this portal has no such group."""
+        with self._client() as client:
+            return _request(
+                client,
+                "GET",
+                f"/crm/v3/properties/{object_type}/groups/{name}",
+                "HubSpot",
+                absent_status=404,
+            )
+
+    def create_property_group(self, object_type: str, spec: dict) -> dict:
+        """Define a property group. Properties need one to land in."""
+        with self._client() as client:
+            return _request(
+                client,
+                "POST",
+                f"/crm/v3/properties/{object_type}/groups",
+                "HubSpot",
+                json=spec,
+            )
+
+    def account_info(self) -> dict:
+        """Portal id, time zone, and account type. The cheapest token check there
+        is -- it needs no CRM scope, so a failure here is the token itself."""
+        with self._client() as client:
+            return _request(client, "GET", "/account-info/v3/details", "HubSpot")
 
     def record_url(self, portal_id: str | None, object_type: str, record_id: str) -> str:
         portal = portal_id or os.getenv("HUBSPOT_PORTAL_ID", "")

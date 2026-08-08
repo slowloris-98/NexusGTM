@@ -49,6 +49,10 @@ sourcing:
 # technologies. job_postings publishes a count rather than titles precisely
 # because no posted date is mapped, so no window could filter it -- see
 # _job_phrases.
+#
+# max_per_category is also bounded above by the Clay function for news: it maps a
+# fixed number of News Title slots, so raising this past that count changes
+# nothing until slots are added there too. Lowering it always works.
 signals:
   recency_days: 180
   max_per_category: 3

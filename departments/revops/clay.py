@@ -17,18 +17,17 @@ Three conventions worth knowing before editing:
     `buying_signals` is withheld on the same miss for the same reason: an empty
     list would assert an absence nobody checked. See `ClayEnrichAgent.execute`.
 
-    The signal columns are pinned to one workspace's routine. `SIGNAL_COLUMNS`
-    names them and each reader below names the fields it reads, exactly once,
-    with no alternatives. This module used to guess instead, from a dozen tuples
-    of plausible column names, on the theory that routines are workspace-defined
-    and a rename should not break the read. What it actually bought was four dead
-    columns: the routine returned job postings, funding, news and technology, and
-    every one of them normalised to nothing, for as long as nobody looked. An
-    empty `buying_signals` is a documented real answer -- "we looked and this
-    company is quiet" -- so a mis-mapped column and a genuine silence produced
-    output no consumer could tell apart. Adding a thirteenth alias would have
-    kept that property. Porting to another workspace means renaming the columns
-    in Clay to match the readers, or editing four short functions.
+    The signal fields are pinned to one workspace's routine, by name, once each.
+    This module used to guess instead, from a dozen tuples of plausible column
+    names, on the theory that routines are workspace-defined and a rename should
+    not break the read. What it actually bought was four dead columns: the
+    routine returned job postings, funding, news and technology, and every one of
+    them normalised to nothing, for as long as nobody looked. An empty
+    `buying_signals` is a documented real answer -- "we looked and this company is
+    quiet" -- so a mis-mapped column and a genuine silence produced output no
+    consumer could tell apart. Adding a thirteenth alias would have kept that
+    property. Porting to another workspace means naming the function's outputs to
+    match the constants below, or editing four short readers.
 
     Firmographics are a different bet and still read through `_pluck`'s aliases:
     those columns come straight out of Clay's own "Enrich Company", whose titles
@@ -36,18 +35,22 @@ Three conventions worth knowing before editing:
     the miss path, not a silent empty list.
 
     Signals are normalised in Python, not by a model. One routine returns
-    firmographics AND the raw signal columns -- `job_postings`, `latest_funding`,
-    `recent_news`, `technologies` -- and `_buying_signals` turns them into short
-    phrases here. Two reasons, and the second is the load-bearing one. A model
-    asked to summarise retrieved data guesses again, which is the thing Clay is
-    here to remove. And the raw blobs must never reach the blackboard: a news
-    item carries a full paragraph of `Description` and a product carries another,
+    firmographics AND the signal fields, and `_buying_signals` turns them into
+    short phrases here. Two reasons, and the second is the load-bearing one. A
+    model asked to summarise retrieved data guesses again, which is the thing
+    Clay is here to remove. And the raw blobs must never reach the blackboard,
     because `sales.outreach_draft` serialises its ENTIRE payload into a prompt
     and charges it against the budget guardrail. Only the phrases go out.
 
+    On that last point the function's output picker does most of the work: it
+    emits scalar leaves only, so the `Jobs` array, the `Products` array and a
+    paragraph of `Description` per news story never leave Clay at all. Cheaper
+    than fetching them to drop them, and the readers are flatter for it.
+
     A signal column the routine did not send is reported, not raised. It lands in
     `clay_enrichment.reason` while the columns that did arrive still publish --
-    the distinction the old aliasing destroyed, made explicit.
+    the distinction the old aliasing destroyed, made explicit. `_missing_columns`
+    is honest about what the flat shape costs that distinction.
 """
 
 from __future__ import annotations
@@ -210,13 +213,41 @@ def _records_of(response: dict) -> list[dict]:
     return records
 
 
-# --------------------------------------------------------------- signal columns
-# The four columns this routine emits, and the only place they are listed. Two
-# consumers -- the readers below and `_missing_columns` -- so this must not drift
-# into two half-agreeing lists. It is the one table in the design; the fields
-# *inside* each column are named at the single point of use, where they read next
-# to the phrase they build.
-SIGNAL_COLUMNS = ("job_postings", "latest_funding", "recent_news", "technologies")
+# ---------------------------------------------------------------- signal fields
+# The routine's signal outputs arrive FLAT. Clay's function output picker only
+# emits scalar leaves -- you select `recent_news > News > 0 > News Title`, not the
+# `recent_news` object -- so nothing here is nested and there is nothing to
+# unwrap. That is a better deal than it sounds: the `Jobs` array, the `Products`
+# array and every `Description` paragraph stay in Clay instead of crossing the
+# wire to be discarded inside `execute`.
+#
+# One name per field, no alternatives. Guessing among plausible names is what hid
+# four dead columns; see the module docstring.
+JOBS_TOTAL = "Total Jobs Found"
+FUNDING_STAGE = "Funding Stage"
+FUNDING_AMOUNT = "Latest Funding Amount"
+FUNDING_DATE = "Last Funding Date"
+NEWS_TITLE = "News Title"
+NEWS_DATE = "Publish Date"
+TECH_NAMES = "Product Names"
+
+# Clay numbers repeated leaves from the second one: "News Title", "News Title 2",
+# "News Title 3". `_news_slots` walks that sequence for as far as the function
+# maps it, so adding a fourth pair in Clay needs no edit here.
+def _slot(field: str, index: int) -> str:
+    return field if index == 1 else f"{field} {index}"
+
+
+# Which flat fields came from which Clay column. Used only by `_missing_columns`,
+# to answer "did the routine send this column at all" now that a column is no
+# longer one key. The readers below name the same constants at their point of
+# use, so the two cannot drift apart into half-agreeing lists.
+SIGNAL_COLUMNS = {
+    "job_postings": (JOBS_TOTAL,),
+    "latest_funding": (FUNDING_STAGE, FUNDING_AMOUNT, FUNDING_DATE),
+    "recent_news": (NEWS_TITLE, NEWS_DATE),
+    "technologies": (TECH_NAMES,),
+}
 
 # What a failed enrichment cell holds instead of data. These are not speculative:
 # the live table shows all three, and `technologies` misses on most rows because
@@ -321,26 +352,6 @@ def _dedupe(phrases: list[str]) -> list[str]:
     return unique
 
 
-def _unwrap(value: Any, container: str) -> list[dict]:
-    """The item dicts under `{container: [...]}`, or nothing.
-
-    Three of the four signal columns wrap their rows this way, and each names its
-    own container at the call site -- "Jobs", "News", "Products". Naming it there
-    instead of searching for it here is the entire difference between this and
-    the alias guessing it replaces: one name, supplied by the caller that knows.
-
-    Anything else is not this column and yields nothing. That strictness is
-    load-bearing rather than tidy -- it is what stops a failed cell's message
-    being read as data, without this function knowing what a failed cell is.
-    """
-    if not isinstance(value, dict):
-        return []
-    rows = _pluck(value, container)
-    if not isinstance(rows, list):
-        return []
-    return [row for row in rows if isinstance(row, dict)]
-
-
 def _vendor_missed(value: Any) -> bool:
     """True when a cell holds a provider's "nothing found" message.
 
@@ -409,29 +420,22 @@ def _explicit_phrases(record: dict) -> list[str]:
 
 
 def _funding_phrases(record: dict, window: int) -> list[str]:
-    """`latest_funding` -> at most one phrase.
+    """At most one phrase: the round before the latest is history, not a signal.
 
-    A flat dict, unlike the other three: the provider returns the single most
-    recent round rather than a list, so there is nothing to sort and no cap to
-    apply. The round before the latest is history, not a reason to call today.
+    The provider returns the single most recent round, so there is nothing to
+    sort and no cap to apply.
 
-    Read: Funding Stage, Latest Funding Amount, Last Funding Date. Ignored on
-    purpose: Funding News Title, Investors, Company Valuation, Funding News URL,
-    Domain, Company Name. The headline is the tempting one -- human-written and
+    Ignored on purpose, and worth not re-adding: Funding News Title, Investors,
+    Company Valuation. The headline is the tempting one -- human-written and
     richer, it carries the valuation -- but its shape changes with every
     publisher, it eats the whole phrase budget, and it names the company back at
-    itself in an email addressed to that company.
+    itself in an email addressed to that company. Leave them unmapped in Clay.
     """
-    raw = _pluck(record, "latest_funding")
-    if not isinstance(raw, dict):
-        # A bare string here is "Company not found", not prose worth splitting.
-        return []
-
-    amount = _pluck(raw, "Latest Funding Amount")
+    amount = _pluck(record, FUNDING_AMOUNT)
     parts = [
         part
         for part in (
-            _signal_label(_pluck(raw, "Funding Stage", default="")),
+            _signal_label(_pluck(record, FUNDING_STAGE, default="")),
             _money(amount) if amount not in (None, "") else "",
         )
         if part
@@ -439,122 +443,104 @@ def _funding_phrases(record: dict, window: int) -> list[str]:
     if not parts:
         return []
 
-    when = _as_date(_pluck(raw, "Last Funding Date"))
+    when = _as_date(_pluck(record, FUNDING_DATE))
     return [f"funding: raised {' '.join(parts)}"] if _within(when, window) else []
 
 
 def _job_phrases(record: dict) -> list[str]:
-    """`job_postings` -> one count phrase, and never a job title.
+    """One count phrase, and never a job title.
 
-    Takes no window and no cap, which is the whole point. The column does carry a
-    `Jobs` array, but no posted-date field in it is mapped, so a published title
+    Takes no window and no cap, which is the whole point. The `Jobs` array does
+    carry titles, but no posted-date field in it is mapped, so a published title
     would assert a freshness the data cannot support -- and `outreach_draft`
     reads this list top-down for an opening line, which is how a two-year-old
     requisition becomes the first sentence of an email. A count is true about now
-    whatever any single posting's age. Map a posted date and titles become
-    defensible again.
+    whatever any single posting's age.
 
-    `total jobs returned` is the API's page size, not the company's hiring
-    volume; publishing it would understate a big employer as reliably as it
-    flatters a small one. Named here because it is the likeliest wrong grab in
-    the record.
+    So the Clay function maps `Total Jobs Found` and nothing else from that
+    column. Map a posted date alongside the titles and phrases become defensible
+    again -- until then, leaving `Jobs` unmapped also keeps it off the wire.
+
+    Do not reach for `Total Jobs Returned` if you ever map it: that is the API's
+    page size, not the company's hiring volume, and it understates a big employer
+    as reliably as it flatters a small one.
     """
-    raw = _pluck(record, "job_postings")
-    if not isinstance(raw, dict):
-        return []
-
-    openings = _as_int(_pluck(raw, "total jobs found"))
+    openings = _as_int(_pluck(record, JOBS_TOTAL))
     return [f"{openings} open roles"] if openings else []
 
 
-def _news_phrases(record: dict, window: int, cap: int) -> list[str]:
-    """`recent_news` -> up to `cap` phrases, newest first.
+def _news_slots(record: dict) -> list[tuple[str, date | None]]:
+    """Walk `News Title` / `News Title 2` / ... for as far as the function maps.
 
-    News Title and Publish Date, off each item under `News`. Description, News
-    Topics, News URL, Publisher and Id are never read: Description alone is a
-    full paragraph per item, and what this function does not read stays inside
-    execute() instead of reaching a prompt.
+    The stop condition is the *key* being absent, not the value being empty --
+    "slot mapped but this company had only two stories" and "only two slots were
+    ever mapped" are different facts, and stopping on an empty value would end
+    the walk early on the first company with a short news list.
     """
+    present = {_norm(key) for key in record}
     items = []
-    for item in _unwrap(_pluck(record, "recent_news"), "News"):
-        label = _signal_label(_pluck(item, "News Title", default=""))
+    index = 1
+    while _norm(_slot(NEWS_TITLE, index)) in present:
+        label = _signal_label(_pluck(record, _slot(NEWS_TITLE, index), default=""))
         if label:
-            items.append((label, _as_date(_pluck(item, "Publish Date"))))
+            items.append((label, _as_date(_pluck(record, _slot(NEWS_DATE, index)))))
+        index += 1
+    return items
 
-    return [f"news: {label}" for label, _ in _recent_first(items, window)[:cap]]
+
+def _news_phrases(record: dict, window: int, cap: int) -> list[str]:
+    """Up to `cap` phrases, newest first.
+
+    Only the title and date of each story are mapped. Description, News Topics,
+    News URL and Publisher are not, which is what keeps a paragraph per story out
+    of a payload `sales.outreach_draft` serialises whole into a prompt.
+    """
+    return [
+        f"news: {label}" for label, _ in _recent_first(_news_slots(record), window)[:cap]
+    ]
 
 
 def _tech_phrases(record: dict, cap: int) -> list[str]:
-    """`technologies` -> one phrase, or none.
+    """One phrase, or none.
 
-    No window, deliberately: a stack is context rather than an event, and
-    `Product Last Verified Date` runs a year old without meaning the company
+    No window, deliberately: a stack is context rather than an event, and the
+    provider's verification date runs a year old without meaning the company
     stopped using the tool. One phrase rather than one per tool, so a long stack
     cannot out-vote a funding round on phrase count alone.
 
-    `Products[].Product Name` is the source. The pre-joined `Product Names`
-    string is derived from it, so it is a fallback for a workspace that enabled
-    the summary column without the detail array -- and when the two disagree the
-    array wins, because reading the joined one means guessing which separator the
-    provider chose. Product Description is never read.
+    `Product Names` is the provider's own joined list across every product it
+    found, which is why the per-product `Product Name` leaf is not mapped -- that
+    one is a single product, and on a multi-product company it would silently
+    report one of several.
     """
-    raw = _pluck(record, "technologies")
-    names = [
-        _signal_label(_pluck(item, "Product Name", default=""))
-        for item in _unwrap(raw, "Products")
-    ]
+    joined = _pluck(record, TECH_NAMES, default="")
+    if not isinstance(joined, str) or _vendor_missed(joined):
+        return []
 
-    if not any(names) and isinstance(raw, dict):
-        joined = _pluck(raw, "Product Names", default="")
-        if isinstance(joined, str) and not _vendor_missed(joined):
-            names = [_phrase(name) for name in _split_list(joined)]
-
-    names = _dedupe([name for name in names if name])
+    names = _dedupe([_phrase(name) for name in _split_list(joined)])
     return [f"uses {', '.join(names[:cap])}"] if names else []
 
 
 def _missing_columns(record: dict) -> list[str]:
-    """Signal columns the routine did not send, in declaration order.
+    """Clay columns the routine did not send, in declaration order.
 
-    Three things produce no phrases and only two of them are faults:
+    A column is now several flat fields rather than one key, so "did the routine
+    send it" is "are any of its fields here". Absent means nobody mapped it --
+    a mapping fault, and the thing worth saying out loud.
 
-        absent          the routine never emitted the column -- a mapping fault,
-                        and the one this reports
-        a miss message  the provider has no record for this company -- a real
-                        answer, and reported as nothing, because `technologies`
-                        alone would otherwise put a note on most runs and train
-                        everyone to ignore the field
-        an unknown shape  present, not a miss, unreadable -- `_unreadable_columns`
-
-    Kept out of the readers because `_pluck` collapses absent and empty, and
-    threading a second return value through four functions to say which is which
-    would put plumbing in the four places this rewrite exists to keep legible.
+    What this can no longer tell you, and the honest cost of the flat shape: a
+    column whose provider found nothing arrives with its leaves null, exactly
+    like one nobody mapped. When the columns were whole objects, a miss carried
+    the provider's message and was distinguishable. It is not any more. The
+    remaining tell is not per-run: a mapping fault is identical on every row,
+    while a vendor miss varies from company to company.
     """
     present = {_norm(key) for key in record}
-    return [column for column in SIGNAL_COLUMNS if _norm(column) not in present]
-
-
-def _unreadable_columns(record: dict) -> list[str]:
-    """Signal columns that arrived in a shape no reader can use.
-
-    Every column of this routine is an object. Something else in the slot -- a
-    bare list, a number, a string that is not a recognised miss -- means the
-    mapping changed under us, which is worth saying out loud rather than
-    absorbing into an empty list.
-
-    Shape only. A dict whose inner container was renamed still reads as fine
-    here and yields nothing; catching that would need a second table of
-    per-column field names, and keeping those at their point of use is the
-    property this rewrite is buying.
-    """
-    unreadable = []
-    for column in SIGNAL_COLUMNS:
-        value = _pluck(record, column)
-        if value in (None, "", [], {}) or _vendor_missed(value):
-            continue
-        if not isinstance(value, dict):
-            unreadable.append(column)
-    return unreadable
+    return [
+        column
+        for column, fields in SIGNAL_COLUMNS.items()
+        if not any(_norm(field) in present for field in fields)
+    ]
 
 
 def _mapping_note(record: dict) -> str:
@@ -563,21 +549,14 @@ def _mapping_note(record: dict) -> str:
     Terse, and never phrased as a claim about the company: `clay_enrichment`
     lands on the blackboard and `sales.outreach_draft` serialises its entire
     payload into a prompt, so "Northwind has no funding data" would be a
-    fabricated fact in an email-writing context. These say what *we* failed to
+    fabricated fact in an email-writing context. This says what *we* failed to
     read.
     """
-    clauses = []
-    for columns, template in (
-        (_missing_columns(record), "no {names} column{s} in response"),
-        (_unreadable_columns(record), "{names} column{s} unreadable"),
-    ):
-        if columns:
-            clauses.append(
-                template.format(
-                    names=", ".join(columns), s="s" if len(columns) > 1 else ""
-                )
-            )
-    return "; ".join(clauses)
+    missing = _missing_columns(record)
+    if not missing:
+        return ""
+    plural = "s" if len(missing) > 1 else ""
+    return f"no {', '.join(missing)} column{plural} in response"
 
 
 def _buying_signals(record: dict, policy: dict) -> list[str]:

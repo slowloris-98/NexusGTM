@@ -15,7 +15,7 @@ import httpx
 import pytest
 
 from departments.revops import clients
-from departments.revops.clients import ClayClient, VendorError
+from departments.revops.clients import ClayClient, HubspotClient, VendorError
 
 
 def _client(handler) -> httpx.Client:
@@ -216,3 +216,125 @@ def test_an_unconfigured_routine_id_is_caught_before_the_call(clay):
 def test_the_batch_ceiling_is_enforced_locally(clay):
     with pytest.raises(VendorError, match="1-100 items"):
         clay.run_routine("routine-1", [])
+
+
+# -------------------------------------------------------------------- hubspot
+
+
+@pytest.fixture
+def hubspot():
+    return HubspotClient(access_token="test-token")
+
+
+def _route(client, handler):
+    """Same injection as `_routed` above, and for the same reason: replacing
+    `_client` would test a client the production code never builds."""
+    client.transport = httpx.MockTransport(handler)
+
+
+def test_the_token_travels_as_an_authorization_bearer(hubspot):
+    """The mirror of the Clay header test, and the same hour of debugging.
+
+    Clay's key goes on its own header; HubSpot's goes on Authorization. Nothing
+    asserted this until a live 401 made the difference expensive to guess at.
+    """
+    seen: dict = {}
+
+    def handler(request):
+        seen["auth"] = request.headers.get("authorization")
+        seen["clay"] = request.headers.get("clay-api-key")
+        return httpx.Response(200, json={"results": []})
+
+    _route(hubspot, handler)
+    hubspot.search("companies", "domain", "northwind.com", ["name"])
+
+    assert seen["auth"] == "Bearer test-token"
+    assert seen["clay"] is None
+
+
+def test_a_search_posts_hubspots_filter_envelope(hubspot):
+    """Agents pass a property and a value; the filterGroups shape is built here."""
+    seen: dict = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"results": [{"id": "42"}]})
+
+    _route(hubspot, handler)
+    found = hubspot.search("companies", "domain", "northwind.com", ["name", "domain"])
+
+    assert seen["url"].endswith("/crm/v3/objects/companies/search")
+    assert seen["body"] == {
+        "filterGroups": [
+            {
+                "filters": [
+                    {
+                        "propertyName": "domain",
+                        "operator": "EQ",
+                        "value": "northwind.com",
+                    }
+                ]
+            }
+        ],
+        "properties": ["name", "domain"],
+        "limit": 1,
+    }
+    assert found == {"id": "42"}
+
+
+def test_no_match_is_none_rather_than_an_empty_dict(hubspot):
+    """`crm_lookup` branches on truthiness, and {} would read as a miss twice over."""
+    _route(hubspot, lambda request: httpx.Response(200, json={"results": []}))
+
+    assert hubspot.search("companies", "domain", "nope.com", ["name"]) is None
+
+
+def test_writes_wrap_properties_and_pick_the_right_verb(hubspot):
+    seen: list[tuple[str, str, dict]] = []
+
+    def handler(request):
+        seen.append((request.method, str(request.url), json.loads(request.content)))
+        return httpx.Response(200, json={"id": "99"})
+
+    _route(hubspot, handler)
+    hubspot.create("companies", {"name": "Northwind"})
+    hubspot.update("companies", "99", {"name": "Northwind Logistics"})
+
+    method, url, body = seen[0]
+    assert (method, body) == ("POST", {"properties": {"name": "Northwind"}})
+    assert url.endswith("/crm/v3/objects/companies")
+
+    method, url, body = seen[1]
+    assert (method, body) == ("PATCH", {"properties": {"name": "Northwind Logistics"}})
+    assert url.endswith("/crm/v3/objects/companies/99")
+
+
+def test_an_absent_property_is_an_answer_and_a_broken_one_is_not(hubspot):
+    """`hubspot_setup` asks about properties it is about to create.
+
+    404 has to come back as None or provisioning could never be idempotent -- but
+    only 404. A 500 still has to raise, or a portal outage would read as an empty
+    portal and the script would try to create properties that already exist.
+    """
+    _route(hubspot, lambda request: httpx.Response(404, json={"message": "no"}))
+    assert hubspot.get_property("companies", "nexusgtm_segment") is None
+
+    _route(hubspot, lambda request: httpx.Response(500, text="down"))
+    with pytest.raises(VendorError, match="returned 500"):
+        hubspot.get_property("companies", "nexusgtm_segment")
+
+
+def test_a_record_url_falls_back_to_the_api_when_no_portal_is_set(hubspot, monkeypatch):
+    """The portal id only makes the URL clickable; without it the run still needs
+    to say which record it wrote."""
+    monkeypatch.delenv("HUBSPOT_PORTAL_ID", raising=False)
+    assert hubspot.record_url(None, "companies", "99").endswith(
+        "/crm/v3/objects/companies/99"
+    )
+
+    monkeypatch.setenv("HUBSPOT_PORTAL_ID", "12345")
+    assert (
+        hubspot.record_url(None, "companies", "99")
+        == "https://app.hubspot.com/contacts/12345/record/companies/99"
+    )

@@ -113,7 +113,12 @@
       "PowerShell(& \"D:\\\\Atreya\\\\College\\\\Projects\\\\NexusGTM\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\atrey\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Atreya-College-Projects-NexusGTM\\\\9a6e99d6-5991-4058-8a29-961eafca147c\\\\scratchpad\\\\live_rows.py\")",
       "PowerShell(git -C \"D:\\\\Atreya\\\\College\\\\Projects\\\\NexusGTM\" diff --stat -- departments/revops/clay.py config/playbook.yaml README.md .env.example)",
       "PowerShell(git -C \"D:\\\\Atreya\\\\College\\\\Projects\\\\NexusGTM\" status --short tests/test_clay_agents.py)",
-      "WebFetch(domain:community.clay.com)"
+      "WebFetch(domain:community.clay.com)",
+      "Bash(python -m pytest tests/test_crm_agents.py tests/test_vendor_clients.py -q)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/test_crm_agents.py tests/test_vendor_clients.py -q)",
+      "Bash(./.venv/Scripts/python.exe -m pytest -q)",
+      "Bash(./.venv/Scripts/python.exe scripts/hubspot_setup.py --help)",
+      "Bash(./.venv/Scripts/python.exe -c ' *)"
     ]
   }
 }

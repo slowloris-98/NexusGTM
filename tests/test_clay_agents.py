@@ -107,60 +107,40 @@ def routine_result(*results, failed: int = 0) -> dict:
     }
 
 
-# ---------------------------------------------------------- the routine's columns
-# Built to the shapes the live routine actually emits, nesting and column names
-# included, so that a test going red because Clay changed reads as a Clay change
-# rather than a puzzle. Every field these carry that the readers deliberately do
-# NOT read is here on purpose -- it is what the leakage test asserts against.
+# ----------------------------------------------------------- the routine's fields
+# Clay's function output picker emits scalar leaves only, so the record is flat.
+# These builders exist so a fixture reads like the output list you tick in Clay,
+# and so the news slot naming -- unsuffixed first, then " 2", " 3" -- lives in one
+# place rather than being spelled out in fifteen fixtures.
 
 
-def jobs_column(found: int, returned: int | None = None, titles=()) -> dict:
-    return {
-        "total jobs found": found,
-        "total jobs returned": len(titles) if returned is None else returned,
-        "Jobs": [
-            {"id": f"job-{i}", "job_title": title, "url": "https://example.com/j"}
-            for i, title in enumerate(titles)
-        ],
-    }
+def jobs_fields(found: int) -> dict:
+    return {"Total Jobs Found": found}
 
 
-def news_column(*items) -> dict:
-    """Each item is (title, days_old) or (title, days_old, description)."""
-    return {
-        "News": [
-            {
-                "Domain": "northwind.com",
-                "Id": f"news-{i}",
-                "News Title": title,
-                "Publish Date": None if age is None else days_ago(age),
-                "News URL": "https://example.com/n",
-                "Publisher": "Business Wire",
-                **({"Description": rest[0]} if rest else {}),
-            }
-            for i, (title, age, *rest) in enumerate(items)
-        ]
-    }
+def funding_fields(stage=None, amount=None, days_old=None) -> dict:
+    fields: dict = {}
+    if stage is not None:
+        fields["Funding Stage"] = stage
+    if amount is not None:
+        fields["Latest Funding Amount"] = amount
+    if days_old is not None:
+        fields["Last Funding Date"] = days_ago(days_old)
+    return fields
 
 
-def tech_column(*names, joined: str | None = None, description: str | None = None) -> dict:
-    column: dict = {
-        "Products": [
-            {
-                "Hg Product Id": 20000 + i,
-                "Product Name": name,
-                "Vendor Name": name,
-                "Vendor Domain": "example.com",
-                "Most Specific Category": "Sales",
-                "Product Last Verified Date": days_ago(300),
-                **({"Product Description": description} if description else {}),
-            }
-            for i, name in enumerate(names)
-        ]
-    }
-    if joined is not None:
-        column["Product Names"] = joined
-    return column
+def news_fields(*items) -> dict:
+    """Each item is (title, days_old). Slot 1 is unsuffixed, then " 2", " 3"."""
+    fields: dict = {}
+    for index, (title, age) in enumerate(items, start=1):
+        suffix = "" if index == 1 else f" {index}"
+        fields[f"News Title{suffix}"] = title
+        fields[f"Publish Date{suffix}"] = None if age is None else days_ago(age)
+    return fields
+
+
+def tech_fields(*names) -> dict:
+    return {"Product Names": ", ".join(names)}
 
 
 def test_a_match_produces_firmographics_stamped_as_retrieved(clay_returns, spender):
@@ -445,10 +425,11 @@ def test_no_signals_is_an_answer_not_a_failure(clay_returns, spender):
             {
                 "company_name": "Northwind",
                 "domain": "northwind.com",
-                "job_postings": {"total jobs found": 0, "Jobs": []},
-                "latest_funding": {},
-                "recent_news": {"News": []},
-                "technologies": {"Products": []},
+                "Total Jobs Found": 0,
+                "Funding Stage": "",
+                "News Title": "",
+                "Publish Date": "",
+                "Product Names": "",
             }
         )
     )
@@ -463,30 +444,30 @@ def test_no_signals_is_an_answer_not_a_failure(clay_returns, spender):
 @pytest.mark.parametrize(
     "raw, expected",
     [
-        (jobs_column(1195, titles=["VP RevOps"]), ["1195 open roles"]),
-        (jobs_column(3), ["3 open roles"]),
-        (jobs_column(0), []),
-        ({"Jobs": [{"job_title": "VP RevOps"}]}, []),   # no count column
+        (jobs_fields(1195), ["1195 open roles"]),
+        (jobs_fields("3,125"), ["3125 open roles"]),   # a Text-typed leaf
+        (jobs_fields(0), []),
+        (jobs_fields(None), []),
         ({}, []),
-        (None, []),
-        # A failed cell holds the provider's message, not a shape to parse.
-        ("No company with that domain found", []),
+        # A failed cell's leaf carries the provider's message, not a count.
+        (jobs_fields("No company with that domain found"), []),
     ],
 )
 def test_the_jobs_column_becomes_an_open_roles_count(raw, expected):
-    assert clay._job_phrases({"job_postings": raw}) == expected
+    assert clay._job_phrases(raw) == expected
 
 
 def test_job_titles_are_never_published():
     """A title would assert a freshness this column cannot support.
 
-    Nothing under `Jobs` is a posted date this routine maps, so `_within` would
-    keep every posting forever -- and outreach_draft reads this list top-down for
-    an opening line. Map a posted date and this is the test to revisit.
+    No posted-date leaf is mapped, so `_within` would keep every posting forever
+    -- and outreach_draft reads this list top-down for an opening line. Only
+    `Total Jobs Found` is selected in the Clay function, which is also why the
+    `Jobs` array never leaves Clay. Map a posted date and revisit this.
     """
-    column = jobs_column(42, titles=[f"Role {i}" for i in range(9)])
-
-    phrases = clay._job_phrases({"job_postings": column})
+    phrases = clay._job_phrases(
+        {"Total Jobs Found": 42, "Job Title": "VP RevOps", "Job Title 2": "AE"}
+    )
 
     assert phrases == ["42 open roles"]
     assert not any(phrase.startswith("hiring:") for phrase in phrases)
@@ -496,11 +477,13 @@ def test_total_jobs_returned_is_not_the_count_we_publish():
     """It is the API's page size, not the company's hiring volume.
 
     Publishing it would understate a big employer as reliably as it flatters a
-    small one, and it sits one key away from the field we do want.
+    small one, and it sits one tick away in the output picker from the one we do
+    want. Pinned even though the function does not map it, because the day
+    someone maps it this test says why not to read it.
     """
-    column = jobs_column(137, returned=10, titles=[f"Role {i}" for i in range(10)])
+    record = {"Total Jobs Found": 137, "Total Jobs Returned": 10}
 
-    assert clay._job_phrases({"job_postings": column}) == ["137 open roles"]
+    assert clay._job_phrases(record) == ["137 open roles"]
 
 
 @pytest.mark.parametrize(
@@ -517,15 +500,13 @@ def test_total_jobs_returned_is_not_the_count_we_publish():
          ["funding: raised Series B $30M"]),
         ({"Funding Stage": "Series A"}, ["funding: raised Series A"]),
         ({"Latest Funding Amount": 5_000_000}, ["funding: raised $5M"]),
-        # A bare string is the provider's message, never prose worth splitting.
-        ("Series B, $30M, Jan 2025", []),
-        ("Company not found", []),
+        # A failed cell's leaf carries the provider's message, not a stage.
+        ({"Funding Stage": "Company not found"}, []),
         ({}, []),
-        (None, []),
     ],
 )
 def test_the_funding_column_becomes_one_assembled_phrase(raw, expected):
-    assert clay._funding_phrases({"latest_funding": raw}, 180) == expected
+    assert clay._funding_phrases(raw, 180) == expected
 
 
 def test_a_stale_round_is_not_a_signal():
@@ -535,13 +516,9 @@ def test_a_stale_round_is_not_a_signal():
     table -- without it the empty result reads as "the mapping is still broken"
     and someone re-breaks the recency filter chasing it.
     """
-    column = {
-        "Funding Stage": "Series E",
-        "Latest Funding Amount": 250_000_000,
-        "Last Funding Date": days_ago(400),
-    }
+    record = funding_fields("Series E", 250_000_000, days_old=400)
 
-    assert clay._funding_phrases({"latest_funding": column}, 180) == []
+    assert clay._funding_phrases(record, 180) == []
 
 
 def test_the_funding_headline_is_not_the_funding_phrase():
@@ -549,16 +526,17 @@ def test_the_funding_headline_is_not_the_funding_phrase():
 
     Its shape changes with every publisher, it eats the whole phrase budget, and
     it names the company back at itself in an email addressed to that company.
+    So it is not mapped in the Clay function -- and if someone maps it anyway,
+    this pins that it still does not become the phrase.
     """
-    column = {
-        "Funding Stage": "Series E",
-        "Latest Funding Amount": 250_000_000,
+    record = {
+        **funding_fields("Series E", 250_000_000),
         "Funding News Title": "Northwind Raises $250M in Series E at $3.25B Valuation",
         "Company Valuation": 3_250_000_000,
         "Investors": "Accel, CRV, GV",
     }
 
-    phrases = clay._funding_phrases({"latest_funding": column}, 180)
+    phrases = clay._funding_phrases(record, 180)
 
     assert phrases == ["funding: raised Series E $250M"]
     assert "Valuation" not in " ".join(phrases)
@@ -568,28 +546,44 @@ def test_the_funding_headline_is_not_the_funding_phrase():
 @pytest.mark.parametrize(
     "raw, expected",
     [
-        (news_column(("Opens Berlin office", 5)), ["news: Opens Berlin office"]),
+        (news_fields(("Opens Berlin office", 5)), ["news: Opens Berlin office"]),
         # Newest first: outreach_draft opens with whatever leads the list.
-        (news_column(("Opens Berlin office", 5), ("Names new CFO", 2)),
+        (news_fields(("Opens Berlin office", 5), ("Names new CFO", 2)),
          ["news: Names new CFO", "news: Opens Berlin office"]),
-        (news_column(), []),
-        ({"News": "News not found"}, []),
-        ("News not found", []),
+        (news_fields(), []),
+        ({"News Title": ""}, []),
+        ({"News Title": "News not found"}, []),
         ({}, []),
-        (None, []),
     ],
 )
 def test_the_news_column_becomes_news_phrases(raw, expected):
-    assert clay._news_phrases({"recent_news": raw}, 180, 3) == expected
+    assert clay._news_phrases(raw, 180, 3) == expected
+
+
+def test_news_slots_are_walked_until_the_function_stops_mapping_them():
+    """Clay numbers repeated leaves from the second: "News Title", " 2", " 3".
+
+    Walking until the KEY is absent rather than until a value is empty is the
+    load-bearing part -- a company with one story still has slots 2 and 3 mapped
+    and empty, and stopping there would hide every later story. It also means
+    ticking a fourth pair in Clay needs no edit here, which this asserts.
+    """
+    record = news_fields(("First", 1), ("", None), ("Third", 3), ("Fourth", 4))
+
+    assert clay._news_phrases(record, 180, 9) == [
+        "news: First",
+        "news: Third",
+        "news: Fourth",
+    ]
 
 
 @pytest.mark.parametrize(
     "raw",
     [
-        tech_column("Salesforce", "Marketo", "Segment"),
-        tech_column("Salesforce", "Marketo", "Segment", "salesforce"),
-        tech_column(joined="Salesforce, Marketo, Segment"),
-        tech_column(joined="Salesforce; Marketo | Segment"),
+        tech_fields("Salesforce", "Marketo", "Segment"),
+        tech_fields("Salesforce", "Marketo", "Segment", "salesforce"),
+        {"Product Names": "Salesforce; Marketo | Segment"},
+        {"Product Names": "Salesforce\nMarketo/Segment"},
     ],
 )
 def test_technologies_collapse_to_one_phrase(raw):
@@ -598,36 +592,27 @@ def test_technologies_collapse_to_one_phrase(raw):
     One phrase per tool would let a long tech list out-vote a funding round on
     phrase count alone.
     """
-    assert clay._tech_phrases({"technologies": raw}, 3) == [
-        "uses Salesforce, Marketo, Segment"
-    ]
+    assert clay._tech_phrases(raw, 3) == ["uses Salesforce, Marketo, Segment"]
 
 
-def test_the_product_list_wins_over_the_pre_joined_names_when_they_disagree():
-    """Product Names is derived from Products, so the array is right by
-    construction -- and reading the joined string means guessing which separator
-    the provider chose, which is the guessing this module is done with."""
-    assert clay._tech_phrases({"technologies": tech_column("Segment", joined="Salesforce")}, 3) == [
-        "uses Segment"
-    ]
+def test_the_joined_product_names_are_what_we_map_not_a_single_product():
+    """`Product Names` is the provider's list across every product it found.
 
+    The per-product `Product Name` leaf sits right beside it in the output
+    picker and is the wrong tick: on a company running three tools it reports
+    one of them, silently, and looks completely fine.
+    """
+    record = {"Product Names": "Salesforce, Segment", "Product Name": "Salesforce"}
 
-def test_the_pre_joined_product_names_are_a_fallback_when_products_is_absent():
-    """A workspace can enable the summary column without the detail array."""
-    column = {"Product Names": "Salesforce, Segment"}
-
-    assert clay._tech_phrases({"technologies": column}, 3) == ["uses Salesforce, Segment"]
+    assert clay._tech_phrases(record, 3) == ["uses Salesforce, Segment"]
 
 
 @pytest.mark.parametrize("age, kept", [(10, True), (179, True), (400, False)])
 def test_stale_items_are_dropped_and_recent_ones_kept(age, kept):
     """Only the two columns that carry a date -- jobs publish a count instead."""
     record = {
-        "recent_news": news_column(("Opens Berlin office", age)),
-        "latest_funding": {
-            "Funding Stage": "Series B",
-            "Last Funding Date": days_ago(age),
-        },
+        **news_fields(("Opens Berlin office", age)),
+        **funding_fields("Series B", days_old=age),
     }
 
     signals = clay._buying_signals(record, POLICY)
@@ -642,11 +627,7 @@ def test_an_unparseable_date_is_kept_rather_than_dropped(stamp):
     Dropping these would delete real events over a formatting mismatch -- and
     read downstream as "the company is quiet".
     """
-    record = {
-        "recent_news": {
-            "News": [{"News Title": "Opens Berlin office", "Publish Date": stamp}]
-        }
-    }
+    record = {"News Title": "Opens Berlin office", "Publish Date": stamp}
 
     assert clay._news_phrases(record, 180, 3) == ["news: Opens Berlin office"]
 
@@ -670,10 +651,10 @@ def test_the_date_formats_a_clay_column_actually_emits_all_parse(stamp):
 def test_the_signal_order_puts_funding_before_hiring_before_news():
     """outreach_draft reads the list top-down looking for an opening line."""
     record = {
-        "technologies": tech_column("Segment"),
-        "recent_news": news_column(("Opens Berlin office", 9)),
-        "job_postings": jobs_column(42),
-        "latest_funding": {"Funding Stage": "Series B"},
+        **tech_fields("Segment"),
+        **news_fields(("Opens Berlin office", 9)),
+        **jobs_fields(42),
+        **funding_fields("Series B"),
         "signals": ["champion changed jobs"],
     }
 
@@ -688,7 +669,7 @@ def test_the_signal_order_puts_funding_before_hiring_before_news():
 
 def test_the_phrase_cap_comes_from_the_playbook(signals_policy):
     signals_policy({"recency_days": 180, "max_per_category": 1})
-    record = {"recent_news": news_column(("first", 1), ("second", 2), ("third", 3))}
+    record = news_fields(("first", 1), ("second", 2), ("third", 3))
 
     assert clay._news_phrases(record, 180, clay.signal_policy()["max_per_category"]) == [
         "news: first"
@@ -697,7 +678,7 @@ def test_the_phrase_cap_comes_from_the_playbook(signals_policy):
 
 def test_the_recency_window_comes_from_the_playbook(signals_policy):
     signals_policy({"recency_days": 7, "max_per_category": 3})
-    record = {"recent_news": news_column(("Opens Berlin office", 30))}
+    record = news_fields(("Opens Berlin office", 30))
 
     assert clay._buying_signals(record, clay.signal_policy()) == []
 
@@ -722,14 +703,16 @@ def test_missing_signal_policy_costs_nothing(signals_policy, clay_returns):
 def test_raw_signal_blobs_never_reach_the_blackboard(clay_returns, spender):
     """The reason the normaliser is in Python at all.
 
-    sales/server.py:56 serialises its ENTIRE payload into the outreach prompt.
-    Every news item carries a paragraph of Description and every product another,
-    so the raw columns must stay inside execute() and only the phrases go out.
+    sales/server.py:56 serialises its ENTIRE payload into the outreach prompt, so
+    whatever the record carries and the readers do not read must stay inside
+    execute(). Only the phrases go out.
 
-    Each assertion below names a field a reader deliberately does not read. They
-    are cheap and they are the only thing standing between a helpful-looking
-    "just pass the whole column through" edit and a re-tokenised blob charged
-    against the budget guardrail at every later step.
+    The Clay function is the first line of defence -- it maps scalar leaves, so
+    the Jobs array and the Description paragraphs never leave Clay. This fixture
+    assumes that defence has been undone: someone ticked the extra leaves, or a
+    later routine emits them. Every assertion names a field a reader deliberately
+    does not read, and together they stand between a helpful-looking "just pass
+    the record through" edit and a blob re-tokenised at every later step.
     """
     filler = "a very long description that must never reach a prompt " * 5
     clay_returns(
@@ -737,16 +720,17 @@ def test_raw_signal_blobs_never_reach_the_blackboard(clay_returns, spender):
             {
                 "company_name": "Northwind",
                 "domain": "northwind.com",
-                "job_postings": jobs_column(42, titles=[f"Role {i}" for i in range(40)]),
-                "latest_funding": {
-                    "Funding Stage": "Series B",
-                    "Latest Funding Amount": 30_000_000,
-                    "Investors": "Accel, CRV, GV, Notable Capital",
-                    "Funding News Title": "Northwind Raises $30M in Series B",
-                    "Funding News URL": "https://example.com/funding",
-                },
-                "recent_news": news_column(("Opens Berlin office", 3, filler)),
-                "technologies": tech_column("Salesforce", description=filler),
+                **jobs_fields(42),
+                "Job Title": "Role 0",
+                **funding_fields("Series B", 30_000_000),
+                "Investors": "Accel, CRV, GV, Notable Capital",
+                "Funding News Title": "Northwind Raises $30M in Series B",
+                "Funding News URL": "https://example.com/funding",
+                **news_fields(("Opens Berlin office", 3)),
+                "Description": filler,
+                "Publisher": "Business Wire",
+                **tech_fields("Salesforce"),
+                "Product Description": filler,
             }
         )
     )
@@ -764,8 +748,8 @@ def test_raw_signal_blobs_never_reach_the_blackboard(clay_returns, spender):
     assert "Accel" not in serialised              # Investors
     assert "Northwind Raises" not in serialised   # Funding News Title
     assert "example.com" not in serialised        # every URL in every column
-    assert "Role 0" not in serialised             # Jobs[].job_title
-    assert "Business Wire" not in serialised      # News[].Publisher
+    assert "Role 0" not in serialised             # a job title leaf
+    assert "Business Wire" not in serialised      # News Publisher
     assert "42 open roles" in output["buying_signals"]
 
 
@@ -776,10 +760,7 @@ def test_one_routine_call_per_invocation(clay_returns, spender):
             {
                 "company_name": "Northwind",
                 "domain": "northwind.com",
-                "latest_funding": {
-                    "Funding Stage": "Series B",
-                    "Last Funding Date": days_ago(10),
-                },
+                **funding_fields("Series B", days_old=10),
             }
         )
     )
@@ -809,21 +790,11 @@ def test_the_real_routine_shape_produces_all_four_phrase_kinds(clay_returns, spe
                 "Industry": "Logistics Software",
                 "Annual Revenue": "200M-500M",
                 "hq_region": "San Francisco, California",
-                "job_postings": jobs_column(1195, titles=["VP RevOps"]),
-                "latest_funding": {
-                    "Domain": "northwind.com",
-                    "Company Name": "Northwind Logistics",
-                    "Funding Stage": "Series E",
-                    "Latest Funding Amount": 250_000_000,
-                    "Company Valuation": 3_250_000_000,
-                    "Last Funding Date": days_ago(20),
-                    "Investors": "Accel, CRV, GV",
-                    "Funding News Title": "Northwind Raises $250M in Series E",
-                },
-                "recent_news": news_column(("Opens Berlin office", 9)),
-                "technologies": tech_column("Salesforce", "Segment",
-                                            joined="Salesforce, Segment"),
-                "Product Names": "Salesforce, Segment",
+                "Is Primary": True,
+                **jobs_fields(1195),
+                **funding_fields("Series E", 250_000_000, days_old=20),
+                **news_fields(("Opens Berlin office", 9), ("Names a new CFO", 2)),
+                **tech_fields("Salesforce", "Segment"),
             }
         )
     )
@@ -832,12 +803,15 @@ def test_the_real_routine_shape_produces_all_four_phrase_kinds(clay_returns, spe
 
     firmographics = output["firmographics"]
     assert firmographics["company_name"] == "Northwind Logistics"
+    # No `domain` output is mapped: the agent falls back to the domain it looked
+    # up, which is why Website's scheme-and-www form never reaches HubSpot.
     assert firmographics["domain"] == "northwind.com"
     assert firmographics["employee_count"] == 1011
     assert firmographics["revenue_band"] == "200M-500M"
     assert output["buying_signals"] == [
         "funding: raised Series E $250M",
         "1195 open roles",
+        "news: Names a new CFO",
         "news: Opens Berlin office",
         "uses Salesforce, Segment",
     ]
@@ -845,7 +819,8 @@ def test_the_real_routine_shape_produces_all_four_phrase_kinds(clay_returns, spe
 
 
 @pytest.mark.parametrize(
-    "column", ["job_postings", "latest_funding", "recent_news", "technologies"]
+    "field",
+    ["Total Jobs Found", "Funding Stage", "News Title", "Product Names"],
 )
 @pytest.mark.parametrize(
     "value",
@@ -856,7 +831,7 @@ def test_the_real_routine_shape_produces_all_four_phrase_kinds(clay_returns, spe
         None,
     ],
 )
-def test_a_failed_cells_error_text_never_becomes_a_signal(column, value):
+def test_a_failed_cells_error_text_never_becomes_a_signal(field, value):
     """The stakes are a fabricated claim in a customer-facing email.
 
     sales/server.py:56 serialises its entire payload into the outreach prompt,
@@ -864,7 +839,7 @@ def test_a_failed_cells_error_text_never_becomes_a_signal(column, value):
     not hypothetical either -- most rows of the real table have a failed cell,
     and technologies misses on the large majority of them.
     """
-    assert clay._buying_signals({column: value}, POLICY) == []
+    assert clay._buying_signals({field: value}, POLICY) == []
 
 
 def test_a_vendor_miss_is_not_reported_as_a_mapping_fault():
@@ -873,12 +848,16 @@ def test_a_vendor_miss_is_not_reported_as_a_mapping_fault():
     It is the same statement as clay_enrichment.matched=false, one column down.
     Flagging it would put a note on nearly every run and teach everyone to skip
     reading the field -- which is how the original bug survived.
+
+    The fields are *present* here, carrying the provider's message. What the flat
+    shape cannot tell you is the case where a miss nulls its leaves instead --
+    then it is indistinguishable from unmapped. `_missing_columns` says so.
     """
     record = {
-        "job_postings": jobs_column(3),
-        "latest_funding": "Company not found",
-        "recent_news": "News not found",
-        "technologies": "No company with that domain found",
+        **jobs_fields(3),
+        "Funding Stage": "Company not found",
+        "News Title": "News not found",
+        "Product Names": "No company with that domain found",
     }
 
     assert clay._mapping_note(record) == ""
@@ -899,8 +878,8 @@ def test_a_missing_signal_column_is_named_in_the_reason_not_swallowed(
             {
                 "company_name": "Northwind",
                 "domain": "northwind.com",
-                "job_postings": jobs_column(42),
-                "recent_news": news_column(("Opens Berlin office", 9)),
+                **jobs_fields(42),
+                **news_fields(("Opens Berlin office", 9)),
             }
         )
     )
@@ -915,25 +894,26 @@ def test_a_missing_signal_column_is_named_in_the_reason_not_swallowed(
 
 
 def test_one_missing_column_reads_as_one_column():
-    record = {
-        "job_postings": jobs_column(42),
-        "latest_funding": {"Funding Stage": "Series B"},
-        "recent_news": news_column(),
-    }
+    record = {**jobs_fields(42), **funding_fields("Series B"), **news_fields(("x", 1))}
 
     assert clay._mapping_note(record) == "no technologies column in response"
 
 
-def test_a_column_in_an_unknown_shape_is_reported_rather_than_absorbed():
-    """Present, not a miss, and not readable -- almost always a changed mapping."""
+def test_any_one_field_of_a_column_proves_the_column_was_mapped():
+    """A column is several flat fields now, so presence is "any of them".
+
+    Only `Last Funding Date` is mapped here -- an odd but legal function -- and
+    that is enough to say the column exists. Requiring all three would report a
+    mapping fault every time a provider filled some leaves and not others.
+    """
     record = {
-        "job_postings": jobs_column(42),
-        "latest_funding": {"Funding Stage": "Series B"},
-        "recent_news": ["Opens Berlin office"],
-        "technologies": ["Salesforce"],
+        **jobs_fields(42),
+        "Last Funding Date": days_ago(10),
+        **news_fields(("x", 1)),
+        **tech_fields("Segment"),
     }
 
-    assert clay._mapping_note(record) == "recent_news, technologies columns unreadable"
+    assert clay._mapping_note(record) == ""
 
 
 def test_a_clean_match_leaves_the_reason_empty(clay_returns, spender):
@@ -944,10 +924,10 @@ def test_a_clean_match_leaves_the_reason_empty(clay_returns, spender):
             {
                 "company_name": "Northwind",
                 "domain": "northwind.com",
-                "job_postings": jobs_column(42),
-                "latest_funding": {"Funding Stage": "Series B"},
-                "recent_news": news_column(),
-                "technologies": tech_column(),
+                **jobs_fields(42),
+                **funding_fields("Series B"),
+                **news_fields(("Opens Berlin office", 9)),
+                **tech_fields("Segment"),
             }
         )
     )
@@ -957,21 +937,17 @@ def test_a_clean_match_leaves_the_reason_empty(clay_returns, spender):
     assert output["clay_enrichment"]["reason"] == ""
 
 
-def test_a_container_key_that_is_not_a_list_yields_no_phrases():
-    """The shape polymorphism is gone, and must not creep back in."""
-    assert clay._news_phrases({"recent_news": {"News": {"News Title": "x"}}}, 180, 3) == []
-    assert clay._tech_phrases({"technologies": {"Products": "Salesforce"}}, 3) == []
-
-
-@pytest.mark.parametrize("column", ["technologies", "Technologies", "TECHNOLOGIES"])
-def test_signal_column_naming_style_does_not_change_the_answer(column):
+@pytest.mark.parametrize(
+    "field", ["Product Names", "product names", "PRODUCT_NAMES", "productNames"]
+)
+def test_signal_field_naming_style_does_not_change_the_answer(field):
     """One name, matched on letters and digits -- not a list of alternatives.
 
     The narrow thing `_pluck` still buys in the signal path. Replacing it with a
-    bare record["technologies"] would break a Clay-wired column that merely
+    bare record["Product Names"] would break a function output that merely
     capitalises differently, which is the silent-empty failure all over again.
     """
-    assert clay._tech_phrases({column: tech_column("Segment")}, 3) == ["uses Segment"]
+    assert clay._tech_phrases({field: "Segment"}, 3) == ["uses Segment"]
 
 
 # ------------------------------------------------------- handoff into scoring

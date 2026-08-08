@@ -10,6 +10,11 @@ poison the system of record for every team that reads it afterwards, silently an
 permanently. So firmographic properties are written under their canonical names
 only when `firmographics.source == "clay"`; a guess goes to `*_inferred`
 properties instead, where it stays visibly a guess.
+
+Which property is canonical for each field is `FACT_PROPERTIES` below, and it is
+not always HubSpot's same-named built-in -- see the note there. Nothing in this
+module creates properties; `scripts/hubspot_setup.py` does that once per portal,
+and reads its list from here so the two cannot drift.
 """
 
 from __future__ import annotations
@@ -40,6 +45,35 @@ COMPANY_PROPERTIES = [
     "country",
     "lifecyclestage",
     "hubspot_owner_id",
+]
+
+# Which HubSpot property each firmographic field is written to. Two of them are
+# deliberately not HubSpot's same-named built-in:
+#
+#   industry      theirs is a validated enumeration -- since July 2023 a value
+#                 outside the portal's option list is a VALIDATION_ERROR, and
+#                 enrichment returns free text like "Logistics Software".
+#   revenue_band  `annualrevenue` is a number. A band ("$25M-$50M") is not one,
+#                 and is not a figure we could honestly convert into one.
+#
+# Both would fail the write outright, so they go to properties this system owns
+# and controls the type of. `scripts/hubspot_setup.py` creates every non-built-in
+# name here, and reads this map to know what to create.
+FACT_PROPERTIES = {
+    "industry": "nexusgtm_industry",
+    "employee_count": "numberofemployees",
+    "revenue_band": "nexusgtm_revenue_band",
+    "hq_region": "country",
+}
+
+# The run's own verdict: this system's output, not a vendor's data.
+VERDICT_PROPERTIES = [
+    "nexusgtm_fit_score",
+    "nexusgtm_segment",
+    "nexusgtm_assigned_rep",
+    "nexusgtm_queue",
+    "nexusgtm_firmographics_source",
+    "nexusgtm_score_reasons",
 ]
 
 
@@ -245,10 +279,8 @@ class CrmSyncAgent(Agent):
         }
 
         facts = {
-            "industry": firmographics.get("industry") or "",
-            "numberofemployees": firmographics.get("employee_count") or "",
-            "annualrevenue": firmographics.get("revenue_band") or "",
-            "country": firmographics.get("hq_region") or "",
+            prop: firmographics.get(field) or ""
+            for field, prop in FACT_PROPERTIES.items()
         }
         if retrieved:
             properties.update({k: v for k, v in facts.items() if v != ""})

@@ -124,24 +124,34 @@ titles vary between workspaces:
 | `Domain`, `Industry`, `Annual Revenue`, `HQ Region` | string |
 | `Employee Count` | number or text — `"1,200"` and `"500+"` both parse |
 
-The four **signal** columns are not. Each is read by one function in
-[departments/revops/clay.py](departments/revops/clay.py) that names its fields exactly once,
-so the output columns must be named as below and carry these shapes:
+The **signal** outputs are not. Clay's output picker emits scalar leaves, so tick exactly
+these — each is read by name, once, in [departments/revops/clay.py](departments/revops/clay.py):
 
-| Column | Shape | Fields read |
+| Clay column | Leaf to tick | Output name |
 | --- | --- | --- |
-| `job_postings` | `{total jobs found, Jobs: [...]}` | `total jobs found` only |
-| `latest_funding` | flat object | `Funding Stage`, `Latest Funding Amount`, `Last Funding Date` |
-| `recent_news` | `{News: [...]}` | `News Title`, `Publish Date` |
-| `technologies` | `{Products: [{...}]}` | `Product Name`, or `Product Names` as a fallback |
+| `job_postings` | Total Jobs Found | `Total Jobs Found` |
+| `latest_funding` | Funding Stage / Latest Funding Amount / Last Funding Date | same |
+| `recent_news` | News › 0/1/2 › News Title and Publish Date | `News Title`, `News Title 2`, `News Title 3` (+ `Publish Date` …) |
+| `technologies` | Product Names | `Product Names` |
+
+Clay names repeated leaves from the second one — `News Title`, then `News Title 2` — and the
+reader walks that sequence for as far as you map it, so a fourth pair needs no code change.
+
+Leave everything else unticked. Not `Website` (the agent falls back to the domain it looked
+up, already stripped of scheme and `www`; ticking `Website` puts `https://…` into HubSpot),
+not `Product Name` singular (one product out of several, silently), not `Jobs`, not
+`Description`. Unmapped leaves never leave Clay, which is most of why this shape is cheaper
+than returning the whole columns.
 
 Names are matched on letters and digits only, so `Employee Count`, `employee_count` and
-`employeeCount` are the same column — but only one name per field is tried. **If a signal
-column is named anything else, it reads as no data at all.** That is not hypothetical: it is
-how all four sat dead behind an empty `buying_signals` until someone compared a real response
-against the code. A column the routine does not send is now reported in
-`clay_enrichment.reason` for exactly that reason; a column the *provider* has no record for
-("No company with that domain found") is a real miss and stays silent.
+`employeeCount` are the same field — but only one name per field is tried. **If a signal
+output is named anything else, it reads as no data at all.** That is not hypothetical: it is
+how all four columns sat dead behind an empty `buying_signals` until someone compared a real
+response against the code. A column with none of its fields present is now reported in
+`clay_enrichment.reason` for exactly that reason. What that note *cannot* tell you is a
+column whose provider found nothing and returned null leaves — indistinguishable from
+unmapped. The tell is not per-run: a mapping fault looks identical on every row, a vendor
+miss varies by company.
 
 `job_postings` publishes a count rather than job titles, deliberately — see `_job_phrases`.
 If your jobs enrichment exposes a posted date, map it and titles become defensible again.
@@ -156,9 +166,49 @@ policy: `signals.recency_days` and `signals.max_per_category` in
 [config/playbook.yaml](config/playbook.yaml). Neither reaches every column — the file's own
 comment says which.
 
+### The HubSpot portal
+
+Get a **developer test account**: sign up at [developers.hubspot.com](https://developers.hubspot.com),
+then **Development → Testing → Create developer test account**. It asks for a company name,
+not a website, and the account is free and disposable — which matters, because the first
+thing you should do to a CRM you are automating is not do it to a real one. Create a private
+app inside it (**Settings → Integrations → Private Apps**) and copy the token into
+`HUBSPOT_ACCESS_TOKEN`. [.env.example](.env.example) lists the five scopes.
+
+Then, **once per portal**:
+
+```bash
+python scripts/hubspot_setup.py --check   # read-only: token, portal id, what is missing
+python scripts/hubspot_setup.py           # define the properties
+python scripts/hubspot_setup.py --seed    # optional: records for crm_lookup to match
+```
+
+`crm_sync` names twelve properties no portal has by default — the run's verdict, and the
+`_inferred` half of the provenance split — and HubSpot rejects a write naming a property it
+does not know. So this is not optional setup: without it the first live sync fails, and so
+does every one after it. The script reads its list from `FACT_PROPERTIES` and
+`VERDICT_PROPERTIES` in [departments/revops/crm.py](departments/revops/crm.py) rather than
+keeping its own, and a test asserts the agent never writes a property outside it.
+
+Two of those properties exist because HubSpot's own would reject the value:
+
+| Field | HubSpot's built-in | Written to instead |
+| --- | --- | --- |
+| `industry` | enumeration — validated against the portal's option list since 2023 | `nexusgtm_industry` |
+| `revenue_band` | `annualrevenue`, a number — a band is not one | `nexusgtm_revenue_band` |
+
+`--seed` covers three of the leads in [scripts/seed.py](scripts/seed.py), not all of them,
+on purpose: a portal where every lookup hits proves less than one where some legitimately
+miss, and `crm_lookup` returning `exists: false` is a path worth exercising against a real
+portal. Seeded records carry a name, domain and lifecycle stage only — everything else has
+to arrive from a real run, or verifying `crm_sync` against them proves nothing.
+
 `CRM_WRITE_ENABLED` is off by default, so `crm_sync` returns the payload it *would* have
-written with `dry_run: true`. Turn it on only against a HubSpot sandbox portal first — a
-seed pass is fifteen runs.
+written with `dry_run: true`. Compare that payload against what `--check` reported as
+present: it catches a bad property name without writing anything. Turn writes on only
+against a sandbox portal — a seed pass is fifteen runs — and **restart the RevOps server**
+afterwards, since `load_dotenv()` runs at import and an edited `.env` does not reach a
+process already running.
 
 Clay bills credits rather than tokens. Set `CLAY_CREDIT_USD` to your effective rate so
 vendor spend reaches the same budget guardrail as LLM spend; unset, it prices at zero, the

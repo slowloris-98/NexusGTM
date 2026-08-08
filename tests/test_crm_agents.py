@@ -82,7 +82,7 @@ def test_inferred_firmographics_never_reach_canonical_properties(
 
     written = next(props for action, _, props in sent if action == "create")
     assert "numberofemployees" not in written
-    assert "annualrevenue" not in written
+    assert "nexusgtm_revenue_band" not in written
     assert written["numberofemployees_inferred"] == 420
     # The provenance itself is recorded, so a human reading the record can tell.
     assert written["nexusgtm_firmographics_source"] == "inferred"
@@ -98,6 +98,34 @@ def test_retrieved_firmographics_are_written_as_fact(hubspot, spender, monkeypat
     assert written["numberofemployees"] == 420
     assert "numberofemployees_inferred" not in written
     assert written["nexusgtm_firmographics_source"] == "clay"
+
+
+@pytest.mark.parametrize(
+    "firmographics", [CLAY_FIRMOGRAPHICS, INFERRED_FIRMOGRAPHICS], ids=["clay", "inferred"]
+)
+def test_industry_and_revenue_avoid_hubspots_incompatible_builtins(
+    hubspot, spender, monkeypatch, firmographics
+):
+    """Neither built-in would accept what enrichment produces.
+
+    HubSpot validates `industry` against the portal's option list and stores
+    `annualrevenue` as a number; enrichment hands back free text and a band
+    string. Writing either is a VALIDATION_ERROR that fails the whole sync, and
+    it only shows up against a real portal -- which is why it is pinned here.
+    """
+    monkeypatch.setenv("CRM_WRITE_ENABLED", "true")
+    sent = hubspot(search_result=None)
+
+    CrmSyncAgent().execute({"firmographics": firmographics, **ROUTED}, spender)
+
+    written = next(props for action, _, props in sent if action == "create")
+    assert "industry" not in written
+    assert "annualrevenue" not in written
+    assert "annualrevenue_inferred" not in written
+
+    suffix = "" if firmographics["source"] == "clay" else "_inferred"
+    assert written[f"nexusgtm_industry{suffix}"] == "Logistics Software"
+    assert written[f"nexusgtm_revenue_band{suffix}"] == "$25M-$50M"
 
 
 def test_the_verdict_is_written_whatever_the_provenance(hubspot, spender, monkeypatch):
@@ -158,6 +186,31 @@ def test_a_prior_lookup_saves_the_search(hubspot, spender, monkeypatch):
 
     assert not any(action == "search" for action, _, _ in sent)
     assert ("update", ("companies", "777")) in [(a, args) for a, args, _ in sent]
+
+
+@pytest.mark.parametrize(
+    "firmographics", [CLAY_FIRMOGRAPHICS, INFERRED_FIRMOGRAPHICS], ids=["clay", "inferred"]
+)
+def test_every_property_written_is_one_the_setup_script_provisions(
+    hubspot, spender, monkeypatch, firmographics
+):
+    """The failure mode this pins is silent until it is live and total.
+
+    HubSpot rejects a write naming a property the portal does not have, so a
+    field added to `_properties` and not to `hubspot_setup` does not degrade the
+    sync -- it fails every one of them, on a portal that was set up correctly for
+    the code as it stood an hour earlier.
+    """
+    from scripts.hubspot_setup import BUILT_IN, property_specs
+
+    monkeypatch.setenv("CRM_WRITE_ENABLED", "true")
+    sent = hubspot(search_result=None)
+
+    CrmSyncAgent().execute({"firmographics": firmographics, **ROUTED}, spender)
+
+    written = next(props for action, _, props in sent if action == "create")
+    provisioned = {spec["name"] for spec in property_specs()} | BUILT_IN
+    assert set(written) <= provisioned
 
 
 def test_sync_requires_enrichment_first(spender):

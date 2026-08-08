@@ -1,7 +1,8 @@
 
 1. playbook should not just be one flow, but multiple flows accross different department.
 2. Integrate clay (lead fetching agent in revops)
-3. Integrate hubspot (crm)
+3. ~~Integrate hubspot (crm)~~ done -- crm_lookup + crm_sync. Portal setup is
+   `scripts/hubspot_setup.py`; see README "The HubSpot portal".
 4. Add more orchestration runs from seed.
 6. json section should be collasable and fields like reason and score should be directly shown.
 7. parallel execution or multiple orchestrations
