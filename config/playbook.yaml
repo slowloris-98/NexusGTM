@@ -1,44 +1,24 @@
-# The shared GTM policy file. The planner renders goal/patterns/thresholds into
-# its prompt, the orchestrator reads guardrails, and the revops agents render icp,
-# thresholds, and negative_signals into their own prompts -- so a policy number
-# lives here once, not once per prompt.
+# The shared GTM policy file. The planner renders the flow index, the current flow,
+# and the cross-cutting patterns into its prompt; the orchestrator reads guardrails;
+# the revops and customer_success agents render icp, thresholds, negative_signals and
+# churn_risk_bands into their own prompts -- so a policy number lives here once, not
+# once per prompt.
 #
-# Never parsed into a graph or state machine -- that would make it the fixed
-# sequence the design rules forbid. Thresholds reach the models as prompt context,
-# not as branch logic in code.
+# Never parsed into a graph or state machine -- that would make it the fixed sequence
+# the design rules forbid. A flow is prompt text: the planner is told which one it is
+# working under and what that flow usually looks like, and is free to leave it.
+# Nothing in code gates the action space by flow.
 
-goal: >
-  Given a raw inbound lead, determine whether it fits our ICP and, if so, get a
-  personalized first-touch draft in front of the right rep.
-
-success_criteria:
-  - lead is enriched with firmographics
-  - a fit score with written reasons exists
-  - qualified leads have an assigned rep and a drafted first touch
-  - disqualified leads terminate early with the reason recorded
+# ---------------------------------------------------------------------- global
+# These are rendered by agents running in their OWN processes, where the current
+# flow is unknowable -- LangGraph state does not cross the MCP boundary. So they
+# are global, and a flow needing different bands declares a NEW top-level key
+# (see churn_risk_bands) rather than shadowing one of these.
 
 # Prose, because it is dropped into the scoring prompt verbatim.
 icp: >
   B2B software and services companies, 50-5000 employees, North America or
   Western Europe, with an identifiable buying signal.
-
-patterns:
-  - name: standard_qualification
-    when: a new raw lead with no enrichment
-    guidance: >
-      Enrich first -- scoring without firmographics produces noise. Score against
-      ICP, then route on the score band, then draft outreach for the assigned rep.
-
-  - name: pre_enriched_lead
-    when: the lead already carries firmographics
-    guidance: >
-      Skip enrichment and score directly. Re-enriching costs money and adds nothing.
-
-  - name: early_disqualification
-    when: score is below the disqualify threshold, or negative signals are present
-    guidance: >
-      Terminate after scoring. Do not route and do not draft outreach -- a rep
-      should never receive a lead we have already judged unqualified.
 
 thresholds:
   route_to_sales: 80
@@ -51,6 +31,306 @@ negative_signals:
   - out_of_region
   - under_10_employees
 
+# How wide an outbound sourcing pass casts. Rendered into clay_source, not read
+# as a default in code -- a literal in the agent would be the duplicated constant
+# this file exists to remove.
+sourcing:
+  limit: 25
+
+# How far back a monitored event still counts as a signal, and how many phrases
+# any one category may contribute. Rendered into clay_enrich's normaliser, which
+# turns Clay's raw signal columns into short phrases. Not read as a default in
+# code -- a literal in the agent would be the duplicated constant this file
+# exists to remove. Raising recency_days costs nothing extra; it only changes
+# what clay_enrich is willing to call recent.
+#
+# Neither reaches all four columns. recency_days applies to latest_funding and
+# recent_news, the two that carry a date; max_per_category to recent_news and
+# technologies. job_postings publishes a count rather than titles precisely
+# because no posted date is mapped, so no window could filter it -- see
+# _job_phrases.
+#
+# max_per_category is also bounded above by the Clay function for news: it maps a
+# fixed number of News Title slots, so raising this past that count changes
+# nothing until slots are added there too. Lowering it always works.
+signals:
+  recency_days: 180
+  max_per_category: 3
+
+# Renewal risk, for customer_success.churn_detection and for routing when it is
+# handed a churn_risk instead of a fit_score. A separate key, not an override of
+# `thresholds`: 70 here means "at risk", 70 there means "send it to an AE".
+churn_risk_bands:
+  save_play: 70
+  monitor: 40
+  healthy: 20
+
+# The default ceiling for every run. A flow may raise or lower either; see
+# flows[].guardrails.
 guardrails:
   max_steps: 12
   budget_usd: 0.50
+
+# ---------------------------------------------------------------------- common
+# Rendered under every flow, whichever one is in force. These are the rules that
+# hold regardless of what started the run.
+common:
+  patterns:
+    - name: enrichment_waterfall
+      when: a lead needs firmographics
+      guidance: >
+        Try clay_enrich first. One call retrieves real firmographics from data
+        providers AND live buying signals -- funding, hiring, recent news,
+        technology adoption -- which sharpen the score and give outreach
+        something real to open with. enrichment only estimates firmographics and
+        returns no signals at all. Fall back to it only when clay_enrich reports
+        clay_enrichment.matched=false; the missing signals are expected on that
+        leg and are not a reason to retry Clay. Never run both once Clay has
+        matched -- that is money spent to replace facts with guesses.
+
+    - name: pre_enriched_lead
+      when: the subject already carries firmographics
+      guidance: >
+        Skip enrichment and proceed. Re-enriching costs money and adds nothing.
+        A churn or engagement assessment already returns firmographics. The one
+        exception is buying signals: clay_enrich is their only retrieved source,
+        so an account that needs outside events still warrants one call -- see
+        the expansion flow.
+
+    - name: early_disqualification
+      when: score is below the disqualify threshold, or negative signals are present
+      guidance: >
+        Terminate after scoring. Do not route and do not draft outreach -- a rep
+        should never receive a lead we have already judged unqualified.
+
+    - name: crm_writeback
+      when: a run has reached a verdict
+      guidance: >
+        Run crm_sync before finishing so the CRM reflects it. Do this for
+        disqualified leads too: the reason is worth recording against the account.
+
+# ----------------------------------------------------------------------- flows
+# Named orchestrations. `when` is the one line the planner sees for EVERY flow,
+# every step -- it is how the planner knows another flow now fits better. Only the
+# current flow's goal, success_criteria and patterns are rendered in full.
+#
+# `trigger` is optional. A flow with one gets a button in that department's pane in
+# the console (GET /flows); a flow without one can still be reached through the API
+# or chosen by the planner mid-run.
+flows:
+  - id: inbound_lead_qualification
+    label: Inbound lead qualification
+    when: a raw inbound lead arrives, from a form, a webinar, or a referral
+    # The flow a run falls back to when the caller names none. Exactly one flow
+    # carries this.
+    default: true
+    goal: >
+      Starting from a raw inbound lead, determine whether the account fits our ICP
+      and, if so, get a personalized first-touch draft in front of the right rep,
+      queued for send, and the verdict written back to the CRM.
+    success_criteria:
+      - lead is enriched with firmographics, retrieved where possible
+      - a fit score with written reasons exists
+      - qualified leads have an assigned rep, a drafted first touch, and a queued send
+      - qualified leads are written back to the CRM before finishing
+      - disqualified leads terminate early with the reason recorded
+    patterns:
+      - name: crm_context_first
+        when: the lead may be on an account we already know
+        guidance: >
+          Run crm_lookup before spending on enrichment. An existing owner,
+          lifecycle stage, or open deal changes the right next step, and it is
+          cheap to ask.
+
+      - name: standard_qualification
+        when: a new raw lead with no enrichment
+        guidance: >
+          Enrich first -- scoring without firmographics produces noise. Score
+          against ICP, then route on the score band, then draft outreach for the
+          assigned rep, then send_outreach, then write the result back to the CRM.
+    trigger:
+      department: marketing
+      label: Qualify an inbound lead
+      description: A form fill, a webinar attendee, a referral.
+      # Advisory prose only. Nothing in code dispatches on it.
+      entry_agent: crm_lookup
+      input:
+        # lead | brief | account | none -- what the console's trigger form collects.
+        kind: lead
+        # Copied into the blackboard at step 0, under whatever the caller sends.
+        # This is what lets a flow start with no lead at all.
+        seed: {}
+      reference_prefix: LEAD
+
+  - id: outbound_sourcing
+    label: Outbound discovery
+    when: the run starts from an ICP brief with no lead yet
+    goal: >
+      Source net-new accounts matching an ICP brief, promote the strongest
+      candidate, and take it through qualification to a queued first touch.
+    success_criteria:
+      - clay_source has produced a candidate list and promoted a lead
+      - the promoted lead is enriched, scored, routed, and drafted for
+      - the outreach is queued for the assigned rep
+      - the verdict is written back to the CRM
+    patterns:
+      - name: source_then_qualify
+        when: no lead exists yet
+        guidance: >
+          Run clay_source first; it promotes the strongest candidate to `lead`.
+          From there this is an ordinary qualification: crm_lookup for context,
+          clay_enrich, scoring, routing, outreach_draft,
+          send_outreach, crm_sync.
+
+      - name: one_lead_per_run
+        when: clay_source returned several accounts
+        guidance: >
+          Work the promoted lead only. The rest of sourced_accounts stays on the
+          blackboard for visibility; fanning out is a separate run.
+    guardrails:
+      # Sourcing adds a step at the front and a vendor call; 12 is tight.
+      max_steps: 14
+    trigger:
+      department: revops
+      label: Source and qualify net-new accounts
+      description: Give Clay an ICP brief and work the strongest match.
+      entry_agent: clay_source
+      input:
+        kind: brief
+        seed: {}
+      reference_prefix: OUTBOUND
+
+  - id: ad_campaign_response
+    label: Ad campaign response
+    when: a paid campaign has produced respondents nobody has worked yet
+    goal: >
+      Pull the current campaign's respondents, take the highest-intent one through
+      qualification, and get a first touch queued for the right rep.
+    success_criteria:
+      - campaign performance and respondents are on the blackboard
+      - the promoted respondent is enriched, scored, and routed
+      - a first touch is drafted and queued
+      - the verdict is written back to the CRM
+    patterns:
+      - name: pull_then_qualify
+        when: the run has just started
+        guidance: >
+          Run run_ad_campaigns first: it returns campaign_performance plus the
+          strongest respondent promoted to `lead`. Then qualify normally --
+          crm_lookup, clay_enrich, scoring, routing, outreach_draft,
+          send_outreach, crm_sync.
+
+      - name: campaign_context_in_outreach
+        when: drafting for a campaign respondent
+        guidance: >
+          The campaign is the reason they raised a hand. Pass the campaign name and
+          what they responded to into outreach_draft so the opening line is about
+          their action, not about us.
+    trigger:
+      department: marketing
+      label: Work an ad campaign's respondents
+      description: Pull the live campaign, qualify its strongest respondent.
+      entry_agent: run_ad_campaigns
+      input:
+        # A flow with no lead and no brief still needs something to reason about.
+        # The seed is it.
+        kind: none
+        seed:
+          campaign: all_active
+          window_days: 14
+      reference_prefix: CAMPAIGN
+
+  - id: account_expansion
+    label: Account expansion
+    when: an existing customer shows usage or stakeholder signals worth an upsell
+    goal: >
+      Read how a named account is engaging, judge whether the expansion signal is
+      real, and put an upsell touch in front of the account's owner.
+    success_criteria:
+      - an engagement summary and expansion signals exist for the account
+      - the expansion case is scored and routed to an owner
+      - an upsell first touch is drafted and queued
+      - the verdict is written back to the CRM
+    patterns:
+      - name: engagement_first
+        when: the run has just started
+        guidance: >
+          Run engagement_tracking first. It returns the usage picture, the
+          expansion signals, and the account's firmographics, which is what scoring
+          needs -- do not reach for enrichment on an account we already serve.
+
+      - name: upsell_not_first_touch
+        when: drafting for an existing customer
+        guidance: >
+          This is not a cold email. Pass the engagement summary and the expansion
+          signals into outreach_draft so the draft opens from what they are already
+          doing with us.
+
+      - name: outside_signals_on_a_thin_account
+        when: engagement_tracking returned little to go on
+        guidance: >
+          Run clay_enrich on the account -- pass the account itself, it keys off
+          the domain. It is the only source of outside events: funding, hiring,
+          recent news, technology adoption, none of which the product tells us
+          anything about. This is the licensed exception to pre_enriched_lead:
+          you are calling it for its buying_signals, not its firmographics, and
+          it happens to return both because Clay answers in one call. It will
+          also replace the estimated firmographics from engagement_tracking with
+          retrieved ones -- that is an upgrade, not a mistake, and crm_sync will
+          write them under their canonical property names. Worth it once. If it
+          reports clay_enrichment.matched=false there are no outside signals to
+          be had; do not reach for enrichment, which only guesses firmographics
+          you already have.
+    trigger:
+      department: customer_success
+      label: Work an expansion signal
+      description: An existing account showing usage growth or new stakeholders.
+      entry_agent: engagement_tracking
+      input:
+        kind: account
+        seed:
+          window_days: 30
+      reference_prefix: EXPANSION
+
+  - id: churn_save
+    label: Churn save
+    when: an existing customer is at renewal risk
+    goal: >
+      Assess renewal risk on a named account and, where the risk is real, get a save
+      play in front of the account owner before the renewal window closes.
+    success_criteria:
+      - a churn_risk with written reasons exists for the account
+      - the account is routed to an owner with an SLA that fits the renewal window
+      - a save-play touch is drafted and queued
+      - the risk assessment is written back to the CRM
+    patterns:
+      - name: assess_then_route
+        when: the run has just started
+        guidance: >
+          Run churn_detection first. It returns churn_risk, the reasons, the renewal
+          window, and the account's firmographics. Then crm_lookup for the owner,
+          then routing on the churn band, then outreach_draft.
+
+      - name: route_on_churn_risk
+        when: routing an account with a churn_risk and no fit_score
+        guidance: >
+          Pass churn_risk to routing rather than inventing a fit_score. High churn
+          risk means a fast SLA, not a disqualification -- the bands run the
+          opposite way to ICP fit.
+
+      - name: save_play_not_prospecting
+        when: drafting for an at-risk customer
+        guidance: >
+          Pass the risk reasons into outreach_draft. The draft is from the account
+          owner, about the specific thing going wrong, with one concrete offer of
+          help. Never a product pitch.
+    trigger:
+      department: customer_success
+      label: Run a churn save
+      description: Assess renewal risk on an account and queue a save play.
+      entry_agent: churn_detection
+      input:
+        kind: account
+        seed:
+          window_days: 90
+      reference_prefix: CHURN

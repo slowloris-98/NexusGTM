@@ -36,6 +36,8 @@ class Seed:
     ref: str
     expect: str
     lead: dict = field(default_factory=dict)
+    # Outbound rows carry a brief and no lead: sourcing produces the lead.
+    brief: str | None = None
     # Guardrail overrides, for the two rows that exist to trip them. Applied as
     # instance attributes on the Orchestrator rather than written into
     # playbook.yaml -- config is lru_cached per process and shared with the
@@ -75,10 +77,13 @@ SEEDS = [
                 "employee_count": 320,
                 "revenue_band": "$25M-$50M",
                 "hq_region": "North America",
-                "buying_signals": ["hiring RevOps", "posted about CRM migration"],
                 "free_email_domain": False,
                 "confidence": 0.9,
             },
+            # Top level, not nested in firmographics: that is where scoring
+            # declares the property and where clay_enrich publishes it. Nesting
+            # it here would teach the planner the wrong shape off the blackboard.
+            "buying_signals": ["hiring RevOps", "posted about CRM migration"],
         },
     ),
     Seed(
@@ -193,10 +198,10 @@ SEEDS = [
                 "employee_count": None,
                 "revenue_band": "unknown",
                 "hq_region": "North America",
-                "buying_signals": [],
                 "free_email_domain": False,
                 "confidence": 0.25,
             },
+            "buying_signals": [],  # top level; see ACME-1002
         },
     ),
     Seed(
@@ -238,6 +243,46 @@ SEEDS = [
             "note": "450-person B2B software vendor in Manchester. Referred by a partner.",
         },
     ),
+    # ------------------------------------------------- Clay and the CRM
+    # Every lead above uses an invented domain, which Clay cannot match. That is
+    # useful -- it exercises the fallback leg of the waterfall -- but it never
+    # shows the hit. These two carry domains a provider actually knows, so
+    # clay_enrich should match and enrichment should never run.
+    Seed(
+        ref="ACME-1013",
+        expect="clay match -- firmographics and buying signals in one call",
+        lead={
+            "name": "Hannah Weiss",
+            "email": "hannah.weiss@vercel.com",
+            "company": "Vercel",
+            "title": "Director of Revenue Operations",
+            "source": "demo_request",
+            "note": "Asked how routing handles a self-serve to enterprise transition.",
+        },
+    ),
+    Seed(
+        ref="ACME-1014",
+        expect="clay miss -- unknown domain, falls back to enrichment",
+        lead={
+            "name": "Owen Brandt",
+            "email": "o.brandt@kesslermarine-ops.com",
+            "company": "Kessler Marine Operations",
+            "title": "Head of Commercial Systems",
+            "source": "webinar",
+            # Deliberately a company no provider carries: the interesting part is
+            # that the planner notices matched=false and reaches for the fallback
+            # rather than giving up or re-running Clay.
+            "note": "260-person marine logistics software vendor. Asked about SLAs.",
+        },
+    ),
+    Seed(
+        ref="ACME-1015",
+        expect="outbound_sourcing -- no lead, clay_source produces one",
+        brief=(
+            "B2B software companies in North America between 200 and 2000 "
+            "employees that have recently hired a revenue operations leader."
+        ),
+    ),
 ]
 
 
@@ -256,10 +301,16 @@ async def main() -> None:
         orchestrator.budget_usd = seed.budget_usd or default_budget
         orchestrator.max_steps = seed.max_steps or default_steps
 
-        print(f"\n=== {seed.ref}  {seed.lead.get('company', '(no company given)')} ===")
+        label = seed.lead.get("company") or (
+            "(outbound brief)" if seed.brief else "(no company given)"
+        )
+        print(f"\n=== {seed.ref}  {label} ===")
         print(f"    expect: {seed.expect}")
 
-        outcome = await orchestrator.run(seed.ref, seed.lead)
+        # An outbound seed carries no lead at all; the empty dict the dataclass
+        # defaults to would read as "a lead with nothing in it", which is a
+        # different and much less useful thing to hand the planner.
+        outcome = await orchestrator.run(seed.ref, seed.lead or None, seed.brief)
         print(
             f"    status={outcome['status']}  outcome={outcome.get('outcome')}  "
             f"steps={outcome.get('steps')}  cost=${outcome.get('total_cost_usd', 0):.4f}"
@@ -281,7 +332,7 @@ async def main() -> None:
 
 
 def print_summary(results: list[tuple[Seed, dict]]) -> None:
-    """Every row on one screen -- thirteen decision trails are not."""
+    """Every row on one screen -- fifteen decision trails are not."""
     print(f"\n\n{'ref':<12} {'status':<16} {'outcome':<14} {'steps':>5} {'cost':>9}")
     print("-" * 60)
     for seed, outcome in results:

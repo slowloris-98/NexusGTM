@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from core import config
-from departments.revops import server
+from departments.revops import clay, server
 
 
 @pytest.fixture
@@ -67,6 +67,55 @@ def test_missing_policy_raises_rather_than_falling_back(policy):
         server.render_score_bands()
 
 
+def test_sourcing_breadth_comes_from_the_playbook(policy):
+    policy(sourcing={"limit": 7})
+
+    assert clay.default_source_limit() == 7
+
+
+def test_missing_sourcing_policy_raises_rather_than_falling_back(policy):
+    policy()  # no sourcing block at all
+
+    with pytest.raises(KeyError):
+        clay.default_source_limit()
+
+
+def test_signal_policy_comes_from_the_playbook(policy):
+    policy(signals={"recency_days": 30, "max_per_category": 1})
+
+    assert clay.signal_policy() == {"recency_days": 30, "max_per_category": 1}
+
+
+def test_missing_signal_policy_raises_rather_than_falling_back(policy):
+    policy()  # no signals block at all
+
+    with pytest.raises(KeyError):
+        clay.signal_policy()
+
+
+def test_a_nonsense_signal_window_is_rejected_rather_than_normalised(policy):
+    """Zero would silently drop every dated event and read as "company is quiet"."""
+    policy(signals={"recency_days": 0, "max_per_category": 3})
+
+    with pytest.raises(ValueError, match="recency_days"):
+        clay.signal_policy()
+
+
+def test_churn_bands_come_from_the_playbook(policy):
+    policy(churn_risk_bands={"save_play": 75, "monitor": 35, "healthy": 15})
+    bands = server.render_churn_bands()
+
+    assert "75+" in bands
+    assert "35-74" in bands
+
+
+def test_missing_churn_policy_raises_rather_than_falling_back(policy):
+    policy()  # no churn_risk_bands block at all
+
+    with pytest.raises(KeyError):
+        server.render_churn_bands()
+
+
 def test_shipped_playbook_satisfies_the_agents():
     """The real config/playbook.yaml carries every key the prompts require."""
     config.load.cache_clear()
@@ -74,3 +123,6 @@ def test_shipped_playbook_satisfies_the_agents():
     assert server.render_icp()
     assert server.render_negative_signals()
     assert server.render_score_bands()
+    assert server.render_churn_bands()
+    assert clay.default_source_limit()
+    assert clay.signal_policy()

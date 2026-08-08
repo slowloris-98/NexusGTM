@@ -50,6 +50,12 @@ typography:
     fontWeight: 400
     lineHeight: 1.35
     letterSpacing: "-0.01em"
+  wordmark:
+    fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "15px"
+    fontWeight: 600
+    lineHeight: 1.5
+    letterSpacing: "0.045em"
   title:
     fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif"
     fontSize: "13px"
@@ -294,8 +300,13 @@ positive tracking on uppercase micro-labels, and only two weights above regular.
   pane the title is the account reference and takes the mono family at the same size.
 - **Answer** (400, 20px, 1.35, `-0.01em`, max 46ch, balanced): the briefing's answer
   sentences. Regular weight at headline size — a statement, not a heading.
-- **Title** (600, 13px, `0.045em`, uppercase): the wordmark. The only place this step
-  appears now that panels are gone.
+- **Wordmark** (600, 15px, `0.045em`, uppercase): the product name in the system bar, and
+  nothing else. It sits between Title and Headline deliberately: the bar now carries the
+  console's navigation, so the name needs enough presence to anchor a strip of tabs — but
+  staying under the 20px Headline keeps it quieter than the title of whatever pane the
+  reader is actually in.
+- **Title** (600, 13px, `0.045em`, uppercase): unused at present. Kept as the step between
+  Wordmark and Body for a heading that is neither.
 - **Body** (400, 13px, 1.5): the working size and the document base — rail rows, tables,
   rationale text, form controls.
 - **Caption** (400, 12px): supporting facts, timestamps, costs in the rail, endpoints,
@@ -353,8 +364,11 @@ Spacing steps in use: `4 · 6 · 8 · 12 · 14 · 18 · 22 · 26 · 72`.
 
 ### Named Rules
 
-**The Fixed Chassis Rule.** The bar and the rail never change with selection. Only the pane
-swaps. A reader who has found a row keeps their place in the list no matter what they open.
+**The Fixed Chassis Rule.** The bar never changes with selection. The rail is Home's
+instrument — a list of orchestrations — and stands down for a whole-screen tab (Live Map, a
+department); *within* Home it never changes, so a reader who has found a row keeps their
+place in the list no matter what they open. The rail is unmounted rather than hidden, so
+nothing behind the pane keeps polling.
 
 **The Structural Breakpoint Rule.** There are exactly two media queries, and each exists to
 change *structure*, not size. At `900px` the rail becomes the whole screen and the pane
@@ -428,15 +442,38 @@ button.
   `aria-label` naming the action, and their glyphs are drawn as inline SVG on
   `currentColor`, never typed as dingbats — `☀`/`☾` render as colour emoji on some
   platforms, which would break the One Accent Rule by accident.
+- **Action button:** the same hairline idiom at 12px with 6/14px padding, for the console's
+  one class of write — a department's trigger. Its border and label both go Signal Blue on
+  hover. Disabled means *working*, not absent: the label swaps to "Running…" and the control
+  dims to Ash rather than disappearing, because the reader needs to see that the thing they
+  pressed is the thing that is busy.
 - **Focus:** a 2px Signal Blue ring at 2px offset with a 6px radius, applied globally to
   `:focus-visible`. Mouse focus is suppressed; keyboard focus is never suppressed.
+
+### Tabs
+
+The system bar's navigation: Home, Live Map, then one tab per department, the department set
+coming from the registry so a new one needs no frontend edit. Borrows the hairline button's
+rule — reacts in colour, never fills.
+
+- **Inactive:** Slate label, transparent 2px bottom border.
+- **Active:** Ink label and a 2px Signal Blue bottom border, pulled onto the bar's own
+  hairline with `margin-bottom: -1px`. An inactive tab leaves that rule unbroken; the active
+  one replaces its 1px with 2px of colour.
+- **Down:** a department whose server is not answering keeps its tab and drops to Ash.
+  Severing beats deleting — the same rule the map follows for a downed branch, and a tab that
+  vanishes reads as a bug rather than an outage.
+- **Overflow:** the strip scrolls horizontally with its scrollbar hidden. It never wraps: the
+  bar is exactly one `--bar-height` row, and a second line of departments would change the
+  chassis.
 
 ### Rail rows
 
 - **Orchestration row:** two lines. The account reference in mono with its cost right-
   aligned, then a status dot, the status word, and a timestamp pushed to the right edge.
-- **Pinned row:** single line, used for the two standing destinations (Today, Spend), with
-  an optional right-aligned trailing figure.
+- **Pinned row:** single line, used for the two standing destinations within Home (Today,
+  Spend), with an optional right-aligned trailing figure. Whole-screen destinations are tabs,
+  not pinned rows — one door per room.
 - **Selected:** a 12% Signal Blue background tint plus Ink text and a semibold reference,
   carried by `aria-current`. Never a coloured left border.
 - **Hover:** a 4% Ink tint. Focus rings inset by 2px so they read inside the rail.

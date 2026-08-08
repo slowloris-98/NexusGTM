@@ -12,3 +12,7 @@ departments:
   - id: sales
     name: Sales
     mcp_endpoint: http://127.0.0.1:8103/mcp
+
+  - id: customer_success
+    name: Customer Success
+    mcp_endpoint: http://127.0.0.1:8104/mcp

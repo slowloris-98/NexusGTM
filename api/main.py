@@ -15,7 +15,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from core import registry
+from core import planner, registry
 from core.orchestrator import Orchestrator
 from store import db, queries
 
@@ -56,8 +56,18 @@ Conn = Annotated[sqlite3.Connection, Depends(get_conn)]
 
 
 class LaunchRequest(BaseModel):
-    crm_reference_id: str
-    lead: dict
+    # Optional now: a campaign or discovery run has no account until an agent
+    # produces one, and the orchestrator synthesizes a readable placeholder.
+    crm_reference_id: str | None = None
+    # Which playbook flow to run under. Omitted means the flow marked `default:`.
+    flow: str | None = None
+    # An inbound run supplies a lead; an outbound run supplies only a brief and
+    # lets sourcing produce the lead.
+    lead: dict | None = None
+    brief: str | None = None
+    # Whatever the trigger form collected -- an account for a churn run, a campaign
+    # name for an ad run. Merged over the flow's own declared seed.
+    seed: dict | None = None
 
 
 @app.get("/orchestrations")
@@ -74,9 +84,61 @@ def get_orchestration(orchestration_id: str, conn: Conn):
 
 
 @app.post("/orchestrations")
-async def launch(request: LaunchRequest, conn: Conn):
-    orchestrator = Orchestrator(conn)
-    return await orchestrator.run(request.crm_reference_id, request.lead)
+async def launch(request: LaunchRequest):
+    """Run an orchestration to completion. Blocking: the caller waits it out.
+
+    Deliberately does NOT take the `Conn` dependency. `get_conn` is sync, so
+    FastAPI resolves it in a threadpool worker, while this endpoint is async and
+    runs on the event loop -- and a SQLite connection cannot cross those two
+    threads. The read endpoints below are sync, so they and their connection
+    share the worker thread and are unaffected.
+
+    Opening it here rather than making the dependency async keeps that property
+    for the reads, and matches what this connection actually is: not a
+    request-scoped reader but the handle a multi-minute run writes through.
+    """
+    conn = db.connect()
+    try:
+        orchestrator = Orchestrator(conn)
+        return await orchestrator.run(
+            request.crm_reference_id,
+            request.lead,
+            request.brief,
+            flow=request.flow,
+            seed=request.seed,
+        )
+    except ValueError as exc:
+        # Also covers an unknown flow id, which run() raises for the same reason:
+        # it is a caller mistake, and the message names the flows that do exist.
+        raise HTTPException(422, str(exc)) from exc
+    finally:
+        conn.close()
+
+
+@app.get("/flows")
+def flows():
+    """The named orchestrations and their department triggers.
+
+    Config-derived, the way /departments is registry-derived: a new flow or a new
+    trigger button appears here from playbook.yaml alone, with no code change.
+
+    Deliberately ships neither `patterns` nor `success_criteria`. Those are prompt
+    text for the planner, and putting them on the wire invites the console to start
+    rendering policy it does not own.
+    """
+    return {
+        "flows": [
+            {
+                "id": flow["id"],
+                "label": flow.get("label", flow["id"]),
+                "when": flow.get("when", ""),
+                "goal": (flow.get("goal") or "").strip(),
+                "default": bool(flow.get("default")),
+                "trigger": flow.get("trigger"),  # null when the flow has no button
+            }
+            for flow in planner.flows()
+        ]
+    }
 
 
 @app.get("/costs")
