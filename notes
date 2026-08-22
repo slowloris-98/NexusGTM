@@ -6,7 +6,7 @@
 4. Add more orchestration runs from seed.
 6. json section should be collasable and fields like reason and score should be directly shown.
 7. parallel execution or multiple orchestrations
-8. Add eval (langsmith is already integrated)
+8. Add eval (langsmith is already integrated) - integrate grafana
 
 Graph:
 
