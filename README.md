@@ -12,6 +12,8 @@ cross-departmental hand-off, and the LLM cost attached to it — per agent, per 
 orchestration. Built for leadership: what the agents are doing, how work moves between
 departments, and what it costs.
 
+**[▶ Watch the demo video here](https://www.loom.com/share/a46d0ce1a4c84951b6d11d6d31bb1fde)**
+
 ![Dashboard SS1](docs/dashboard_ss3.png)
 ![Dashboard SS2](docs/dashboard_ss4.png)
 
