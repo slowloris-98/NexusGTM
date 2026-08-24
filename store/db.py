@@ -18,7 +18,18 @@ def db_path() -> Path:
 
 
 def connect(path: str | Path | None = None) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(path or db_path()), timeout=10.0)
+    # check_same_thread=False because FastAPI resolves a sync generator dependency in
+    # three separate threadpool acquisitions -- __enter__, the endpoint body, __exit__ --
+    # with no affinity between them. Under any concurrency the connection `get_conn`
+    # opens is used from a different worker than it was created on, and the default True
+    # turns that into a ProgrammingError, which Starlette serves as a 500.
+    #
+    # Safe here because it relaxes a same-thread check, not a same-time one: a connection
+    # is owned by exactly one request (or one run) and is only ever handed between workers
+    # in sequence, never touched by two at once.
+    conn = sqlite3.connect(
+        str(path or db_path()), timeout=10.0, check_same_thread=False
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

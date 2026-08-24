@@ -41,8 +41,13 @@ app.add_middleware(
 def get_conn() -> Iterator[sqlite3.Connection]:
     """One connection per request.
 
-    FastAPI runs sync endpoints in a threadpool and SQLite connections cannot
-    cross threads, so a shared module-level connection is not an option. WAL is
+    Not a shared module-level one: FastAPI runs sync endpoints in a threadpool, so
+    several requests are in flight on different workers at once and a single
+    connection would be used concurrently. Per request keeps each connection to one
+    user at a time. `store.db.connect` sets check_same_thread=False only because that
+    one user is handed between workers *within* a request -- FastAPI resolves this
+    dependency's setup, the endpoint body, and its teardown in three separate
+    threadpool acquisitions -- which is a different thing from sharing it. WAL is
     what makes the concurrent readers cheap.
     """
     conn = db.connect()
@@ -87,15 +92,10 @@ def get_orchestration(orchestration_id: str, conn: Conn):
 async def launch(request: LaunchRequest):
     """Run an orchestration to completion. Blocking: the caller waits it out.
 
-    Deliberately does NOT take the `Conn` dependency. `get_conn` is sync, so
-    FastAPI resolves it in a threadpool worker, while this endpoint is async and
-    runs on the event loop -- and a SQLite connection cannot cross those two
-    threads. The read endpoints below are sync, so they and their connection
-    share the worker thread and are unaffected.
-
-    Opening it here rather than making the dependency async keeps that property
-    for the reads, and matches what this connection actually is: not a
-    request-scoped reader but the handle a multi-minute run writes through.
+    Deliberately does NOT take the `Conn` dependency, which is request-scoped and
+    torn down with the response. Opening it here matches what this connection
+    actually is: not a request-scoped reader but the handle a multi-minute run
+    writes through, living on the event-loop thread the run itself runs on.
     """
     conn = db.connect()
     try:
