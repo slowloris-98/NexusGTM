@@ -151,6 +151,150 @@ def record_decision(
     conn.commit()
 
 
+# ----------------------------------------------------------------- voice calls
+# A call outlives the step that placed it, so these rows are written by the voice
+# webhook and the reconciler rather than by the orchestrator. The placing agent
+# holds no DB handle and writes nothing.
+
+def voice_call_placed(
+    conn: sqlite3.Connection,
+    call_id: str,
+    *,
+    orchestration_id: str | None,
+    crm_reference_id: str,
+    status: str = "dialing",
+) -> None:
+    """Record a call we know exists. Idempotent: re-placing the same id is a no-op.
+
+    Called by the webhook on the first event of any kind for a call, not by the
+    agent that dialled -- which is why the status may already be terminal by the
+    time this runs, and why it must never overwrite one.
+    """
+    conn.execute(
+        "INSERT INTO voice_calls (call_id, orchestration_id, crm_reference_id, "
+        "status, placed_at) VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(call_id) DO NOTHING",
+        (call_id, orchestration_id, crm_reference_id, status, _now()),
+    )
+    conn.commit()
+
+
+def voice_call_finalize(
+    conn: sqlite3.Connection,
+    call_id: str,
+    *,
+    status: str,
+    crm_reference_id: str = "",
+    orchestration_id: str | None = None,
+    ended_reason: str | None = None,
+    duration_seconds: int | None = None,
+    cost_usd: float | None = None,
+    recording_url: str | None = None,
+    transcript: str | None = None,
+    raw_report: Any = None,
+    reconciled: bool = False,
+) -> None:
+    """Write a call's terminal state, inserting the row if it is not there yet.
+
+    An upsert rather than an update because the end-of-call webhook can be the
+    very first thing we hear about a call -- a short call can end before any
+    status event lands. `followup_claimed_at` is deliberately untouched: claiming
+    is a separate statement so that redelivery cannot resume a run twice.
+    """
+    now = _now()
+    conn.execute(
+        "INSERT INTO voice_calls (call_id, orchestration_id, crm_reference_id, "
+        "status, ended_reason, duration_seconds, cost_usd, recording_url, "
+        "transcript, raw_report, placed_at, ended_at, reconciled_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(call_id) DO UPDATE SET "
+        "  status = excluded.status, "
+        "  ended_reason = COALESCE(excluded.ended_reason, voice_calls.ended_reason), "
+        "  duration_seconds = COALESCE(excluded.duration_seconds, voice_calls.duration_seconds), "
+        "  cost_usd = COALESCE(excluded.cost_usd, voice_calls.cost_usd), "
+        "  recording_url = COALESCE(excluded.recording_url, voice_calls.recording_url), "
+        "  transcript = COALESCE(excluded.transcript, voice_calls.transcript), "
+        "  raw_report = COALESCE(excluded.raw_report, voice_calls.raw_report), "
+        "  orchestration_id = COALESCE(voice_calls.orchestration_id, excluded.orchestration_id), "
+        "  ended_at = excluded.ended_at, "
+        "  reconciled_at = COALESCE(excluded.reconciled_at, voice_calls.reconciled_at)",
+        (
+            call_id,
+            orchestration_id,
+            crm_reference_id,
+            status,
+            ended_reason,
+            duration_seconds,
+            cost_usd,
+            recording_url,
+            transcript,
+            _dumps(raw_report),
+            now,
+            now,
+            now if reconciled else None,
+        ),
+    )
+    conn.commit()
+
+
+def claim_voice_followup(conn: sqlite3.Connection, call_id: str) -> bool:
+    """Claim the right to resume this call's orchestration. True for exactly one caller.
+
+    The webhook and the reconciler race by design -- either may be the one that
+    learns a call ended. A conditional UPDATE is what makes resuming exactly-once
+    without a lock: whoever sets the column first gets rowcount 1, everyone else
+    gets 0 and does nothing.
+    """
+    cursor = conn.execute(
+        "UPDATE voice_calls SET followup_claimed_at = ? "
+        "WHERE call_id = ? AND followup_claimed_at IS NULL",
+        (_now(), call_id),
+    )
+    conn.commit()
+    return cursor.rowcount == 1
+
+
+def get_voice_call(conn: sqlite3.Connection, call_id: str) -> dict | None:
+    r = conn.execute(
+        "SELECT * FROM voice_calls WHERE call_id = ?", (call_id,)
+    ).fetchone()
+    return None if r is None else _row(r, ("raw_report",))
+
+
+def pending_voice_calls(
+    conn: sqlite3.Connection, older_than_iso: str, limit: int = 50
+) -> list[dict]:
+    """Calls that have not reached a terminal state, or reached one unclaimed.
+
+    The second half is the important one: a call that ended but whose claim never
+    happened -- the process died between finalizing and launching -- is owed a
+    resume just as much as one still marked dialing.
+    """
+    rows = conn.execute(
+        "SELECT * FROM voice_calls WHERE followup_claimed_at IS NULL "
+        "AND placed_at < ? ORDER BY placed_at LIMIT ?",
+        (older_than_iso, limit),
+    ).fetchall()
+    return [_row(r, ("raw_report",)) for r in rows]
+
+
+def reopen_orchestration(conn: sqlite3.Connection, orchestration_id: str) -> None:
+    """Put a finalized orchestration back into `running` so it can be resumed.
+
+    A voice call's outcome arrives after the graph has already exited, and the
+    design keeps one orchestration row per job rather than spawning a second one.
+    So the row is genuinely re-opened: status back to running, finished_at
+    cleared. The consequence, accepted deliberately, is that the stored
+    total_cost_usd stops matching what the budget guardrail saw mid-run -- which
+    is only tolerable because telephony spend is exempt from that ceiling.
+    """
+    conn.execute(
+        "UPDATE orchestrations SET status = 'running', finished_at = NULL WHERE id = ?",
+        (orchestration_id,),
+    )
+    conn.commit()
+
+
 # --------------------------------------------------------------------------- reads
 
 def total_cost(conn: sqlite3.Connection, orchestration_id: str) -> float:

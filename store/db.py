@@ -29,6 +29,11 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
 # Columns added to tables that already ship in existing databases. CREATE TABLE
 # IF NOT EXISTS silently does nothing to a table that exists, so a column added to
 # schema.sql alone would never reach a store that has already been created.
+#
+# Whole new TABLES do not belong here. `init_db` runs the entire schema.sql on
+# every start, so CREATE TABLE IF NOT EXISTS reaches an existing database on its
+# own -- which is why `voice_calls` is a table rather than columns bolted onto
+# `runs`, and why this tuple stayed empty of it.
 _ADDED_COLUMNS = (
     ("orchestrations", "flow", "TEXT"),
     ("decisions", "flow", "TEXT"),

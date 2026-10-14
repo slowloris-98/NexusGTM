@@ -49,8 +49,40 @@ CREATE TABLE IF NOT EXISTS decisions (
     timestamp             TEXT NOT NULL
 );
 
+-- A voice call is long-lived and bidirectional while an agent call is one-shot, so
+-- the call outlives the step that placed it. This table is the join. The placing
+-- agent writes nothing -- agents hold no DB handle -- so every row here is owned by
+-- the voice webhook and the reconciler, and `call_id` (the vendor's own id) is the
+-- idempotency key that keeps a redelivered webhook from resuming a run twice.
+--
+-- The reconciler is why this table exists rather than a column somewhere: a call
+-- whose end-of-call webhook never arrives (a transfer, a dropped delivery) still
+-- has to reach the planner, and a pending row older than call_policy's
+-- reconcile_after_minutes is the only durable record that it is owed.
+CREATE TABLE IF NOT EXISTS voice_calls (
+    call_id              TEXT PRIMARY KEY,       -- the vendor's id; the idempotency key
+    orchestration_id     TEXT REFERENCES orchestrations(id),
+    crm_reference_id     TEXT NOT NULL,
+    status               TEXT NOT NULL,          -- dialing | in_progress | completed
+                                                 -- transferred | no_answer | failed | unknown
+    ended_reason         TEXT,
+    duration_seconds     INTEGER,
+    cost_usd             REAL,
+    recording_url        TEXT,
+    transcript           TEXT,
+    raw_report           TEXT,                   -- JSON, the vendor payload as received
+    placed_at            TEXT NOT NULL,
+    ended_at             TEXT,
+    reconciled_at        TEXT,
+    -- Set once, by whichever of the webhook or the reconciler claims the call
+    -- first. The conditional UPDATE on this column is what makes resuming exactly-once.
+    followup_claimed_at  TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_runs_orch        ON runs(orchestration_id);
 CREATE INDEX IF NOT EXISTS idx_cost_orch        ON cost_events(orchestration_id);
 CREATE INDEX IF NOT EXISTS idx_cost_agent       ON cost_events(department, agent);
 CREATE INDEX IF NOT EXISTS idx_decisions_orch   ON decisions(orchestration_id, step_no);
 CREATE INDEX IF NOT EXISTS idx_orch_started     ON orchestrations(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_voice_pending    ON voice_calls(status, placed_at);
+CREATE INDEX IF NOT EXISTS idx_voice_orch       ON voice_calls(orchestration_id);
