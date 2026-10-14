@@ -479,6 +479,147 @@ class Orchestrator:
         }
 
 
+    async def resume(self, orchestration_id: str, *, seed: dict | None = None) -> dict:
+        """Continue an orchestration whose graph has already exited.
+
+        A voice call outlives the step that placed it: `voice_outreach` returns in
+        about a second, the planner has nothing left to do, and the graph exits
+        while the conversation is still going. The outcome arrives minutes later,
+        from a webhook.
+
+        Rather than start a second orchestration for the tail of the same job,
+        this re-enters the graph on the original row -- same id, same flow,
+        `step_no` carrying on where it stopped. One orchestration per job stays
+        true, `cost_events` accumulate under the one id so `total_cost_usd`
+        resums correctly, and the decision log reads as a single path with a gap
+        in the middle.
+
+        The cost of that choice, accepted deliberately: the stored total stops
+        matching what the budget guardrail saw when the row was first finalized,
+        and a resumed run carries no budget ceiling at all. Both are tolerable for
+        the same reason -- a budget cannot halt a conversation that has already
+        happened, and halting on the call's cost would mean never recording the
+        call. The steps are still bounded; only the money is not.
+
+        `seed` is merged over the restored blackboard, which is how the webhook
+        hands in the call record it already fetched.
+        """
+        stored = queries.get_orchestration(self.conn, orchestration_id)
+        if stored is None:
+            raise ValueError(f"unknown orchestration {orchestration_id!r}")
+
+        blackboard = dict(stored.get("final_result") or {})
+        if seed:
+            blackboard.update(copy.deepcopy(seed))
+
+        # Rebuilt from the runs log rather than carried in memory: the process
+        # that placed the call is usually not the one resuming it.
+        history = [
+            {
+                "step_no": run["step_no"],
+                "agent": run["agent"],
+                "status": run["status"],
+                "note": None,
+            }
+            for run in stored.get("runs") or []
+        ]
+        step_no = max((r["step_no"] for r in stored.get("runs") or []), default=0)
+
+        # The flow it ended on, not the one it started under -- a mid-run switch
+        # must survive the gap, or the planner would be told it is working under
+        # a flow it already left.
+        decisions = stored.get("decisions") or []
+        flow = next(
+            (d["flow"] for d in reversed(decisions) if d.get("flow")),
+            stored.get("flow"),
+        )
+
+        flow_def = planner.flow_by_id(flow)
+        overrides = (flow_def or {}).get("guardrails") or {}
+        # Headroom is granted relative to where the run stopped, not from zero: a
+        # run that parked at step 5 of 12 would otherwise resume with its step
+        # ceiling already spent and halt before writing anything back.
+        max_steps = step_no + int(overrides.get("max_steps", self.max_steps))
+
+        discovery = await registry.discover()
+        if discovery.unreachable:
+            log.warning(
+                "resuming with a partial action space; unreachable: %s",
+                [d["id"] for d in discovery.unreachable],
+            )
+
+        queries.reopen_orchestration(self.conn, orchestration_id)
+
+        initial: State = {
+            "orchestration_id": orchestration_id,
+            "crm_reference_id": stored["crm_reference_id"],
+            "blackboard": blackboard,
+            "step_no": step_no,
+            "history": history,
+            "total_cost_usd": self.meter.total_for(orchestration_id),
+            "status": "running",
+            "outcome": None,
+            "observation": None,
+            # Deliberately empty. The fingerprints of the pre-call steps are not
+            # restored: an agent that ran before the call may legitimately need to
+            # run again after it, and crm_sync with a call outcome on the
+            # blackboard is a different call from crm_sync without one.
+            "seen": [],
+            "retries": 0,
+            "pending": None,
+            "agents": discovery.agents,
+            "unreachable": discovery.unreachable,
+            "flow": flow,
+            "max_steps": max_steps,
+            # Deliberately unbounded. A resume exists to record spend that already
+            # happened on a live call, and a ceiling cannot un-make a phone call:
+            # enforcing one here would halt the run on the very cost it was
+            # resumed to write down, leaving the CRM with no record of the call at
+            # all. The spend is still metered onto the orchestration -- reported,
+            # not enforced -- and the pre-call steps were bounded normally.
+            "budget_usd": float("inf"),
+        }
+
+        try:
+            final = await self.graph.ainvoke(
+                initial, config={"recursion_limit": max_steps * 4}
+            )
+        except Exception as exc:
+            log.exception("orchestration %s crashed on resume", orchestration_id)
+            queries.finalize_orchestration(
+                self.conn, orchestration_id, status="failed", outcome="failed",
+                final_result={**blackboard, "resume_error": str(exc)},
+            )
+            return {
+                "orchestration_id": orchestration_id,
+                "status": "failed",
+                "error": str(exc),
+            }
+
+        status = final.get("status", "completed")
+        outcome = final.get("outcome") or _infer_outcome(
+            status, final.get("blackboard", {})
+        )
+
+        queries.finalize_orchestration(
+            self.conn,
+            orchestration_id,
+            status=status,
+            outcome=outcome,
+            final_result=final.get("blackboard", {}),
+        )
+
+        return {
+            "orchestration_id": orchestration_id,
+            "status": status,
+            "outcome": outcome,
+            "steps": final.get("step_no", step_no),
+            "total_cost_usd": self.meter.total_for(orchestration_id),
+            "flow": final.get("flow", flow),
+            "resumed": True,
+        }
+
+
 def registry_lookup(agents: list[AgentSpec], name: str) -> AgentSpec | None:
     for spec in agents:
         if name in (spec.agent, spec.qualified_name):
