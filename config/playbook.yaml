@@ -15,7 +15,24 @@
 # are global, and a flow needing different bands declares a NEW top-level key
 # (see churn_risk_bands) rather than shadowing one of these.
 
-# Prose, because it is dropped into the scoring prompt verbatim.
+# Who the system is working FOR. NexusGTM is the platform; this is the company whose
+# reps the agents act on behalf of, and whose name a prospect actually hears on a call
+# or reads in an email. Switching tenant is an edit to this block and nothing else.
+#
+# Prose, because it is dropped into prompts verbatim -- voice_outreach's opening line
+# and outreach_draft's emails both name it. Never parsed into logic.
+#
+# Not optional: without it the voice agent was asked to "name the company" with no
+# company in scope, and spoke the literal placeholder "[Company Name]" to a prospect.
+identity:
+  company: SecureFlow
+  one_liner: >
+    a compliance automation platform that helps B2B companies prepare for and
+    maintain SOC 2, ISO 27001 and similar audits without a manual evidence chase.
+  website: secureflow.example
+
+# Prose, because it is dropped into the scoring prompt verbatim. This is the ICP of
+# the company named in `identity` above -- who THEY sell to, not who runs NexusGTM.
 icp: >
   B2B software and services companies, 50-5000 employees, North America or
   Western Europe, with an identifiable buying signal.
@@ -71,6 +88,41 @@ guardrails:
   max_steps: 12
   budget_usd: 0.50
 
+# How a live voice call must be conducted. Top-level, never per-flow: these render
+# in the sales department's own process, where the current flow is unknowable --
+# LangGraph state does not cross the MCP boundary.
+#
+# Prose, because it is dropped into the call's system prompt verbatim. Never
+# parsed into branch logic; a rule the model must follow is text, not an `if`.
+#
+# The two reconcile_* numbers are the exception, and the only part of this block
+# that reaches code -- they are read by the voice reconciler the same way
+# `guardrails:` is read by the orchestrator.
+call_policy:
+  max_duration_minutes: 12
+  calling_hours: >
+    09:00-17:00 in the prospect's own local time, weekdays only. Never call
+    outside that window, whatever the SLA says.
+  consent_script: >
+    Open by naming yourself as an AI assistant calling on behalf of the company,
+    say in one sentence why you are calling, and ask whether now is a good time.
+    If they say no, offer to send an email instead and end the call. If they ask
+    whether you are a recording or a person, say plainly that you are an AI
+    assistant.
+  escalation: >
+    Hand off to a human when the caller asks for one, when they raise pricing or
+    contract terms, or when they are clearly annoyed. Say you are transferring
+    them before you do it, and never transfer silently.
+  escalation_number: "+15555550123"
+  disallowed: >
+    Never quote a price, never agree to a contract term, never state a capability
+    you have not been told about, and never claim a human will call at a specific
+    time unless a meeting has actually been booked.
+  # Read by the reconciler, not rendered into a prompt. A call whose end-of-call
+  # webhook never arrives is picked up this long after it was placed.
+  reconcile_after_minutes: 20
+  reconcile_interval_seconds: 120
+
 # ---------------------------------------------------------------------- common
 # Rendered under every flow, whichever one is in force. These are the rules that
 # hold regardless of what started the run.
@@ -102,6 +154,19 @@ common:
       guidance: >
         Terminate after scoring. Do not route and do not draft outreach -- a rep
         should never receive a lead we have already judged unqualified.
+
+    - name: voice_over_email
+      when: the account warrants a live conversation rather than a queued email
+      guidance: >
+        voice_outreach places a real phone call. It returns as soon as the call is
+        dialing -- it does not wait for the conversation, and the outcome arrives
+        later, as further steps on this same run once the call has ended. Prefer
+        it over send_outreach only for a high-band account that has a phone number
+        on the lead, and only once the account is enriched, scored and routed: a
+        call opening with nothing specific to say is worse than no call. It is the
+        most expensive agent here, so a call that should have been an email is
+        money spent twice. Once it reports dialing, finish the run -- do not then
+        call send_outreach for the same touch, and do not place a second call.
 
     - name: crm_writeback
       when: a run has reached a verdict

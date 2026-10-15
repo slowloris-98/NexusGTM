@@ -1,4 +1,13 @@
-"""Sales department MCP server. Agents: outreach_draft, send_outreach."""
+"""Sales department MCP server.
+
+Agents: outreach_draft, send_outreach (email) and voice_outreach,
+voice_call_outcome (phone).
+
+Nothing in THIS module may acquire a transport. `send_outreach` must stay unable
+to send, and a test asserts the guarantee by reading this file's source -- so the
+voice agents' HTTP client lives in `departments/sales/clients.py` and reaches
+here only through the import below.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +18,12 @@ from fastmcp import FastMCP
 
 from core.agent import Agent, Spender, register
 from core.llm import strict_schema
+
+from departments.sales.voice import (
+    VoiceCallOutcomeAgent,
+    VoiceOutreachAgent,
+    render_identity,
+)
 
 # Its own process, so it does not inherit the API's environment: without this the
 # OpenAI client finds no key and every tool call comes back status="error".
@@ -56,7 +71,14 @@ class OutreachDraftAgent(Agent):
             json.dumps(payload, default=str),
             instructions=(
                 "You are an SDR writing a first-touch email. Under 120 words, from the "
-                "assigned rep, to the lead. Open with something specific to their company "
+                "assigned rep, to the lead.\n\n"
+                # The same gap voice_outreach hit, and for the same reason: nothing
+                # in the payload says which company the rep works for. Less visible
+                # in an email than spoken aloud, but a draft reading "from [Company]"
+                # is no better.
+                + render_identity()
+                + "\n\n"
+                "Open with something specific to their company "
                 "drawn from the firmographics or scoring reasons -- no generic flattery, "
                 "no 'I hope this finds you well'. One clear ask. In "
                 "personalization_notes, list which specific data points you used."
@@ -161,6 +183,8 @@ class SendOutreachAgent(Agent):
 
 register(mcp, OutreachDraftAgent())
 register(mcp, SendOutreachAgent())
+register(mcp, VoiceOutreachAgent())
+register(mcp, VoiceCallOutcomeAgent())
 
 if __name__ == "__main__":
     mcp.run(transport="http", host="127.0.0.1", port=8103)
