@@ -6,8 +6,10 @@ per-call data underneath.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import sqlite3
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Annotated, Iterator
 
 from dotenv import load_dotenv
@@ -15,6 +17,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from api import voice
 from core import planner, registry
 from core.orchestrator import Orchestrator
 from store import db, queries
@@ -25,8 +28,26 @@ load_dotenv()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db().close()  # create the schema once, then connect per request
+
+    # The voice reconciler: a call whose end-of-call webhook never arrives still
+    # has to reach the planner, and this loop is what guarantees it. Wrapped
+    # because a reconciler that cannot start must not stop the API from serving --
+    # the reads below are what the console runs on.
+    reconciler = None
+    try:
+        reconciler = asyncio.create_task(voice.reconcile_loop())
+    except Exception:
+        log.exception("voice reconciler did not start; calls will not be swept")
+
     yield
 
+    if reconciler is not None:
+        reconciler.cancel()
+        with suppress(asyncio.CancelledError):
+            await reconciler
+
+
+log = logging.getLogger(__name__)
 
 app = FastAPI(title="NexusGTM Control Plane", lifespan=lifespan)
 
@@ -36,6 +57,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(voice.router)
 
 
 def get_conn() -> Iterator[sqlite3.Connection]:
