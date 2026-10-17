@@ -254,6 +254,14 @@ class VoiceClient:
         return None if found is None else normalize_call(found)
 
 
+# Vendor statuses that mean the call has not finished. A call in this state has
+# no duration and no end reason yet -- which is exactly the shape of a call that
+# failed, so without checking `status` first the two are indistinguishable. That
+# is not theoretical: a run once read a call back two seconds after placing it,
+# got `queued`, and wrote "the call did not connect" to the CRM about a call that
+# went on to run for forty seconds.
+_IN_FLIGHT = {"queued", "ringing", "in-progress", "forwarding"}
+
 _TERMINAL_STATUS = {
     # Vendor endedReason -> this system's status vocabulary. Anything unmapped
     # becomes "completed" when the call ran and "failed" when it did not, rather
@@ -265,6 +273,17 @@ _TERMINAL_STATUS = {
     "customer-busy": "no_answer",
     "voicemail": "no_answer",
     "no-answer": "no_answer",
+    # Nobody on the other end ever spoke. This is what voicemail looks like when
+    # the agent talks to a recording until the vendor gives up on the silence --
+    # it carries a real duration and a real cost, so the duration-based fallback
+    # reads it as `completed` and a voicemail lands in the CRM as a conversation.
+    # Worse than a plain failure, because nobody goes back to check a success.
+    "silence-timed-out": "no_answer",
+    "customer-did-not-answer-honoring-dnd": "no_answer",
+    # Never dialled, or died mid-pipeline. A result nobody should act on.
+    "call.start.error-get-phone-number": "failed",
+    "assistant-error": "failed",
+    "pipeline-error": "failed",
 }
 
 
@@ -308,6 +327,28 @@ def normalize_call(raw: dict) -> dict:
     arrives as zero often enough that billing off it alone under-reports.
     """
     ended_reason = str(raw.get("endedReason") or "").strip()
+
+    # Checked before anything else, because an unfinished call looks exactly like
+    # a failed one: no duration, no end reason. Neither its duration nor its cost
+    # is knowable yet, and returning a guess for either is what put a false
+    # "did not connect" into the CRM. The caller gets `in_progress` and is
+    # expected to come back later -- `api/voice.py:TERMINAL` already excludes it,
+    # so the reconciler treats such a row as still owed.
+    if str(raw.get("status") or "").strip().lower() in _IN_FLIGHT and not ended_reason:
+        return {
+            "call_id": str(raw.get("id") or ""),
+            "status": "in_progress",
+            "ended_reason": None,
+            "duration_seconds": None,
+            "cost_usd": 0.0,
+            "recording_url": None,
+            "transcript": None,
+            "summary": None,
+            "metadata": (raw.get("assistantOverrides") or {}).get("metadata")
+            or raw.get("metadata")
+            or {},
+        }
+
     duration_seconds = _duration_of(raw)
 
     cost = raw.get("cost")

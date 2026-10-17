@@ -231,9 +231,26 @@ async def webhook(
         if event not in ("end-of-call-report", "call.ended"):
             return {"ok": True, "ignored": event}
 
-        record = normalize_call({**raw_call, **message.get("artifact", {})})
-        if message.get("endedReason") and not record.get("ended_reason"):
-            record = normalize_call({**raw_call, "endedReason": message["endedReason"]})
+        # The vendor puts almost nothing on `message.call` -- durationSeconds,
+        # cost, endedReason, recordingUrl, transcript and summary all sit at the
+        # top level of `message`, and its own docs elide the call object entirely
+        # rather than say so. Reading only `message.call` is why a 99-second call
+        # that cost $0.1033 was recorded with no duration and no cost at all.
+        #
+        # Order matters: the call stub supplies the id and the metadata, the
+        # message body overrides it with the real figures, and `artifact` -- the
+        # one nesting the docs do describe -- still contributes where present.
+        record = normalize_call(
+            {
+                **raw_call,
+                **{
+                    k: v
+                    for k, v in message.items()
+                    if k not in ("call", "artifact", "type")
+                },
+                **(message.get("artifact") or {}),
+            }
+        )
 
         # The row goes terminal before anything else happens, so a crash below
         # still leaves the reconciler a durable record to pick up.

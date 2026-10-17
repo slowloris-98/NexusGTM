@@ -289,6 +289,108 @@ def test_an_unknown_event_is_acknowledged_not_retried(client, resumes):
     assert resumes == []
 
 
+# ------------------------------------------------- the shape the vendor sends
+
+
+def _real_report(call_id: str, orchestration_id: str | None) -> dict:
+    """The payload Vapi actually posts, verified against a live call.
+
+    Almost nothing sits on `message.call`: durationSeconds, cost, endedReason,
+    recordingUrl, transcript and summary are all top-level on `message`, and the
+    vendor's own docs elide the call object rather than say so. The older
+    `_report` helper above puts them on `message.call`, which is exactly why the
+    suite stayed green while a real 99-second call was recorded with no duration
+    and no cost.
+    """
+    metadata = {"assigned_rep": "Jordan Kim"}
+    if orchestration_id:
+        metadata["orchestration_id"] = orchestration_id
+        metadata["crm_reference_id"] = "Vercel"
+    return {
+        "message": {
+            "type": "end-of-call-report",
+            "endedReason": "customer-ended-call",
+            "durationSeconds": 99.405,
+            "durationMs": 99405,
+            "cost": 0.1033,
+            "startedAt": "2026-10-17T21:09:14.969Z",
+            "endedAt": "2026-10-17T21:10:54.374Z",
+            "recordingUrl": "https://example.invalid/r.wav",
+            "transcript": "AI: hello\nUser: hi",
+            "summary": "A short conversation.",
+            "call": {"id": call_id, "assistantOverrides": {"metadata": metadata}},
+        }
+    }
+
+
+def test_the_real_payload_shape_populates_duration_and_cost(client, resumes, tmp_path):
+    """The test that would have caught it.
+
+    A 99-second call costing $0.1033 was stored as `duration_seconds: None,
+    cost_usd: 0.0` because the fields were read from `message.call`.
+    """
+    oid = _orchestration(str(tmp_path / "voice.db"))
+    response = client.post("/voice/webhook", json=_real_report("c-real", oid))
+    assert response.status_code == 200
+
+    conn = db.connect(str(tmp_path / "voice.db"))
+    try:
+        row = queries.get_voice_call(conn, "c-real")
+    finally:
+        conn.close()
+
+    assert row["status"] == "completed"
+    assert row["duration_seconds"] == 99
+    assert row["cost_usd"] == pytest.approx(0.1033)
+    assert row["recording_url"] == "https://example.invalid/r.wav"
+    assert "User: hi" in row["transcript"]
+    assert row["crm_reference_id"] == "Vercel"
+
+
+def test_metadata_orchestration_id_drives_the_resume(client, resumes, tmp_path):
+    """The id in the metadata is the only thing that says which run to resume."""
+    oid = _orchestration(str(tmp_path / "voice.db"))
+    client.post("/voice/webhook", json=_real_report("c-real", oid))
+
+    assert len(resumes) == 1
+    assert resumes[0][0] == oid
+
+
+def test_without_an_orchestration_id_nothing_resumes(client, resumes, tmp_path):
+    """A call placed before this fix carries no run id. It records, and stops.
+
+    Not an error: the row is still written, so a reconciler that learns to adopt
+    orphans later has something to find. It simply cannot be resumed from here.
+    """
+    _orchestration(str(tmp_path / "voice.db"))
+    response = client.post("/voice/webhook", json=_real_report("c-orphan", None))
+
+    assert response.status_code == 200
+    assert response.json()["resumed"] is False
+    assert resumes == []
+
+    conn = db.connect(str(tmp_path / "voice.db"))
+    try:
+        assert queries.get_voice_call(conn, "c-orphan")["status"] == "completed"
+    finally:
+        conn.close()
+
+
+def test_the_artifact_nesting_still_works(client, resumes, tmp_path):
+    """The one nesting the docs do describe must keep contributing."""
+    oid = _orchestration(str(tmp_path / "voice.db"))
+    payload = _real_report("c-art", oid)
+    del payload["message"]["transcript"]
+    payload["message"]["artifact"] = {"transcript": "AI: from the artifact"}
+
+    client.post("/voice/webhook", json=payload)
+
+    conn = db.connect(str(tmp_path / "voice.db"))
+    try:
+        assert queries.get_voice_call(conn, "c-art")["transcript"] == "AI: from the artifact"
+    finally:
+        conn.close()
+
 # ------------------------------------------------------------------- tool calls
 
 

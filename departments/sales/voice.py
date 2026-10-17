@@ -62,12 +62,16 @@ def render_identity() -> str:
     is worse than a re-planned run.
     """
     i = playbook()["identity"]
+    company = i["company"]
     return (
-        f"YOU WORK FOR: {i['company']} -- {i['one_liner'].strip()}\n"
-        f"This is the company you are reaching out ON BEHALF OF. It is never the "
-        f"prospect's own company, and it is never a placeholder: if a name is not "
-        f"given to you, leave it out of the sentence rather than inventing one or "
-        f"writing something in brackets."
+        f"YOU WORK FOR: {company} -- {i['one_liner'].strip()}\n"
+        f"This is the company you are reaching out ON BEHALF OF, and it is never "
+        f"the prospect's own company.\n"
+        f"Say the name {company!r} out loud in the opening line. Forbidding only "
+        f"brackets was not enough: a live call opened 'on behalf of Jordan Lee at "
+        f"our team', which is neither a placeholder nor the company's name. "
+        f"'our team', 'our company', 'us' and every other stand-in are wrong -- "
+        f"write {company!r}."
     )
 
 
@@ -127,6 +131,13 @@ class VoiceOutreachAgent(Agent):
             "assigned_rep": {
                 "type": "string",
                 "description": "Routing output. Required -- the call is made on their behalf.",
+            },
+            "crm_reference_id": {
+                "type": "string",
+                "description": (
+                    "The ACCOUNT reference shown in your prompt. Travels with the "
+                    "call so the outcome can be written back to the right account."
+                ),
             },
             "segment": {"type": "string"},
             "fit_score": {"type": "integer"},
@@ -195,8 +206,9 @@ class VoiceOutreachAgent(Agent):
                 "and the notes it will work from.\n\n"
                 + render_identity()
                 + "\n\n"
-                "The opening line must name the rep and the company they work for -- "
-                "the one named above, not the prospect's -- say why we are calling in "
+                f"The opening line must name the rep and say they are from "
+                f"{playbook()['identity']['company']} -- the literal name, never "
+                f"'our team' or any other stand-in -- then say why we are calling in "
                 "one clause drawn from something specific about this account, and then "
                 "ask whether now is a good time. Under 35 words, spoken English: it is "
                 "read aloud, so no bullet points, no email phrasing, no 'I hope this "
@@ -231,7 +243,12 @@ class VoiceOutreachAgent(Agent):
             ]
         )
 
+        # What the end-of-call webhook has to work with, minutes from now. The
+        # vendor echoes this back untouched, and `orchestration_id` is the only
+        # thing that tells api/voice.py which run to resume -- without it the
+        # call completes, the report arrives, and nothing happens.
         metadata = {
+            "orchestration_id": llm.orchestration_id,
             "crm_reference_id": payload.get("crm_reference_id"),
             "assigned_rep": payload["assigned_rep"],
         }
@@ -294,13 +311,18 @@ class VoiceCallOutcomeAgent(Agent):
     department = "sales"
     name = "voice_call_outcome"
     description = (
-        "Read back what happened on a voice call that has already ended, and bill "
+        "Read back what happened on a voice call that has ALREADY ENDED, and bill "
         "its minutes to this run. Returns the disposition, a summary, whether a "
-        "meeting was booked or a human was brought in, and the call's cost. Run "
-        "this before crm_sync on a run whose voice_call has ended; it is the only "
-        "source of the call's outcome. It never places or retries a call, and it "
-        "answers even for a call that was never connected -- a no-answer is a "
-        "result worth recording, not a failure."
+        "meeting was booked or a human was brought in, and the call's cost. It is "
+        "the only source of a call's outcome, and it never places or retries one. "
+        "Do NOT call this in the same run that placed the call. voice_outreach "
+        "returns while the phone is still ringing -- status 'queued' or 'dialing' "
+        "means the conversation has not happened yet, so finish the run instead. "
+        "The run resumes on its own once the call ends, and this agent is the "
+        "first step of that resumed half. Called too early it errors, because a "
+        "call still in flight has no outcome to read. "
+        "It does answer for a call that never connected -- a no-answer is a result "
+        "worth recording against the account, not a failure."
     )
 
     input_schema = {
@@ -381,6 +403,22 @@ class VoiceCallOutcomeAgent(Agent):
                     "source": "inferred",
                 }
             }
+
+        # The precondition every other agent here has: voice_outreach refuses
+        # without a phone, crm_sync without firmographics, and this one must
+        # refuse a call that has not finished. Asking the vendor mid-ring returns
+        # no duration and no end reason, which reads as a failed call -- a run
+        # once wrote "the call did not connect" about a call that was still
+        # ringing and went on to last forty seconds.
+        #
+        # Agent.run turns this into status="error", which the planner sees as an
+        # observation and answers by finishing the run. That is correct: the
+        # webhook, or the reconciler, resumes it once the call actually ends.
+        if record.get("status") == "in_progress":
+            raise ValueError(
+                f"call {call_id} is still in progress; its outcome is not knowable "
+                "yet. Finish this run -- it resumes on its own when the call ends."
+            )
 
         # Telephony spend, recorded exactly once, here. Gated on a non-zero
         # amount like Clay's credit billing: an unpriced vendor logs nothing
