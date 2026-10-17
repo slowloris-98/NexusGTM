@@ -142,6 +142,7 @@ function TriggerForm({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
+  const [phone, setPhone] = useState("");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [fault, setFault] = useState<string | null>(null);
@@ -161,6 +162,10 @@ function TriggerForm({
     const body: LaunchBody = { flow: flow.id };
     if (kind === "lead") {
       body.lead = { name, email, company, source: "console" };
+      // Optional, and only sent when filled: voice_outreach dials lead.phone and
+      // refuses without one, while send_outreach neither needs nor reads it. An
+      // empty string would look like a number the planner could call.
+      if (phone.trim()) body.lead.phone = phone.trim();
       if (company) body.crm_reference_id = company;
     } else if (kind === "brief") {
       body.brief = text.trim();
@@ -212,6 +217,13 @@ function TriggerForm({
             placeholder="Company"
             aria-label="Lead company"
             onChange={(e) => setCompany(e.target.value)}
+          />
+          <input
+            type="tel"
+            value={phone}
+            placeholder="Phone, E.164 (optional)"
+            aria-label="Lead phone number"
+            onChange={(e) => setPhone(e.target.value)}
           />
         </div>
       )}

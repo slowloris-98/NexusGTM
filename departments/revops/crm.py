@@ -20,11 +20,17 @@ and reads its list from here so the two cannot drift.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 
 from core.agent import Agent, Spender
 from core.llm import strict_schema
 
 from departments.revops.clients import HubspotClient, VendorError
+
+
+def _now_iso() -> str:
+    """Timestamp for a booking the call reported without one of its own."""
+    return datetime.now(timezone.utc).isoformat()
 
 CONTACT_PROPERTIES = [
     "email",
@@ -67,6 +73,11 @@ FACT_PROPERTIES = {
 }
 
 # The run's own verdict: this system's output, not a vendor's data.
+#
+# The nexusgtm_call_* half is the outcome of a live voice call, which arrives
+# after the rest -- the call ends long after the agent that placed it returned.
+# It belongs here rather than in FACT_PROPERTIES for the same reason the score
+# does: it is what this system did, not what a data vendor told us.
 VERDICT_PROPERTIES = [
     "nexusgtm_fit_score",
     "nexusgtm_segment",
@@ -74,6 +85,11 @@ VERDICT_PROPERTIES = [
     "nexusgtm_queue",
     "nexusgtm_firmographics_source",
     "nexusgtm_score_reasons",
+    "nexusgtm_call_disposition",
+    "nexusgtm_call_outcome_notes",
+    "nexusgtm_call_recording_url",
+    "nexusgtm_meeting_booked_at",
+    "nexusgtm_call_duration_seconds",
 ]
 
 
@@ -178,7 +194,8 @@ class CrmSyncAgent(Agent):
     description = (
         "Write the run's result back to HubSpot: firmographics, fit score, "
         "segment, assigned rep, and queue. Run this once the lead has been "
-        "scored and routed, before finishing. Requires firmographics. Inferred "
+        "scored and routed, before finishing. Also records a voice call's outcome "
+        "when one is on the blackboard. Requires firmographics. Inferred "
         "firmographics are written to separate _inferred properties so a guess "
         "is never recorded as a retrieved fact."
     )
@@ -195,6 +212,14 @@ class CrmSyncAgent(Agent):
             "crm_account": {
                 "type": "object",
                 "description": "crm_lookup output, when it has already run.",
+            },
+            "voice_call_outcome": {
+                "type": "object",
+                "description": (
+                    "voice_call_outcome output, when a voice call was placed on this "
+                    "run. Its disposition and summary are recorded against the "
+                    "account alongside the verdict."
+                ),
             },
         },
         "required": ["firmographics"],
@@ -303,4 +328,24 @@ class CrmSyncAgent(Agent):
         reasons = payload.get("reasons") or []
         if reasons:
             properties["nexusgtm_score_reasons"] = "; ".join(str(r) for r in reasons)
+
+        # A voice call's outcome, when this run placed one. Written as fact for
+        # the same reason as the verdict above: it is what happened on our call.
+        # The disposition is recorded even for a call that never connected -- a
+        # no-answer against the account is worth more than a silent gap.
+        call = payload.get("voice_call_outcome") or {}
+        if call:
+            call_props = {
+                "nexusgtm_call_disposition": call.get("disposition") or "",
+                "nexusgtm_call_outcome_notes": call.get("summary") or "",
+                "nexusgtm_call_recording_url": call.get("recording_url") or "",
+                "nexusgtm_call_duration_seconds": call.get("duration_seconds"),
+            }
+            if call.get("meeting_booked"):
+                call_props["nexusgtm_meeting_booked_at"] = call.get(
+                    "meeting_booked_at"
+                ) or _now_iso()
+            properties.update(
+                {k: v for k, v in call_props.items() if v not in (None, "")}
+            )
         return properties

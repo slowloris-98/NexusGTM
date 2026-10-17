@@ -24,9 +24,10 @@ operating engineer as a primary reader.
 
 ## Product Purpose
 
-NexusGTM coordinates GTM agents across three departments — Marketing (enrichment),
-RevOps (scoring, routing), and Sales (outreach drafting) — to take a raw inbound lead and
-either get a personalized first-touch draft in front of the right rep, or terminate early
+NexusGTM coordinates GTM agents across four departments — Marketing (enrichment, campaigns),
+RevOps (scoring, routing, CRM, Clay), Sales (outreach drafting and live voice calls), and
+Customer Success (churn risk, engagement) — to take a raw inbound lead and either get a
+personalized first touch in front of the right rep, by email or by phone, or terminate early
 with a recorded reason.
 
 The control plane exists so leadership has visibility into every orchestration, its
@@ -92,6 +93,12 @@ Live data polls on intervals: orchestrations every 4s, registry every 15s, costs
 - Decision trail: per-step agent, rationale, and candidates considered.
 - Knowledge base: plain-text search across past runs (`GET /search`).
 - Launching a run: `POST /orchestrations`.
+- A live outbound phone call, chosen by the planner like any other touch when the account is
+  high-band and the lead carries a number. The agent answers questions, books a meeting, and
+  hands off to a human on request. The outcome always reaches the CRM — including a call that
+  never connected, because an unanswered attempt is worth recording against the account.
+  The company the agent *says it is* comes from `identity:` in the playbook: NexusGTM is the
+  platform, and the agent speaks as the tenant running it.
 
 **Terminology that is product truth**
 
@@ -109,7 +116,7 @@ Live data polls on intervals: orchestrations every 4s, registry every 15s, costs
 - Store is SQLite in WAL mode; one connection per request.
 - `/core` never imports a department. Adding a department is a FastMCP server plus three
   lines in `config/departments.yaml` — nothing under `/core` or `/dashboard` changes. Any
-  design that hardcodes the current three departments or their agent names breaks this.
+  design that hardcodes the current four departments or their agent names breaks this.
 - Costs are sub-cent. Formatting must stay legible at that magnitude.
 
 **Open / undecided**

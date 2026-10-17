@@ -60,7 +60,18 @@ _LABELS = {
     "nexusgtm_score_reasons": "Score Reasons",
     "nexusgtm_industry": "Industry (NexusGTM)",
     "nexusgtm_revenue_band": "Revenue Band",
+    "nexusgtm_call_disposition": "Call Disposition",
+    "nexusgtm_call_outcome_notes": "Call Outcome Notes",
+    "nexusgtm_call_recording_url": "Call Recording URL",
+    "nexusgtm_meeting_booked_at": "Meeting Booked At",
+    "nexusgtm_call_duration_seconds": "Call Duration (seconds)",
 }
+
+# Which verdict properties are not plain text. Sets rather than equality checks,
+# so adding a property is a one-line change here instead of an edit to the call
+# that creates them.
+_NUMBER_PROPERTIES = {"nexusgtm_fit_score", "nexusgtm_call_duration_seconds"}
+_LONG_TEXT_PROPERTIES = {"nexusgtm_score_reasons", "nexusgtm_call_outcome_notes"}
 
 
 def _label(name: str) -> str:
@@ -95,8 +106,8 @@ def property_specs() -> list[dict]:
         specs.append(
             _spec(
                 prop,
-                number=prop == "nexusgtm_fit_score",
-                long_text=prop == "nexusgtm_score_reasons",
+                number=prop in _NUMBER_PROPERTIES,
+                long_text=prop in _LONG_TEXT_PROPERTIES,
             )
         )
     return specs

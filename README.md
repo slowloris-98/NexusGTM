@@ -109,8 +109,10 @@ Or skip activation and call the interpreter directly:
 `.venv/Scripts/python.exe -m departments.marketing.server`.
 
 > Config is cached per process. Editing `config/playbook.yaml` — the flows, the ICP, the
-> score bands, the negative signals — means restarting all four department servers too,
-> not just the API, since their agents render those values into their prompts.
+> score bands, the negative signals, `identity`, `call_policy` — means restarting all four
+> department servers too, not just the API, since their agents render those values into
+> their prompts. A stale `identity:` is how a live call once opened with the literal words
+> "[Company Name]".
 
 Then seed some runs and open <http://localhost:5173>:
 
@@ -169,6 +171,66 @@ A flow with a `trigger:` block gets a button on that department's tab in the con
 trigger is also how the planner knows which scenario it is in at step one, which is why
 starting a run needs no classification call.
 
+## Voice calls
+
+Sales can place a live phone call, not just queue an email. `voice_outreach` dials a
+qualified lead with an agent that answers questions, books a meeting, and hands off to a
+human; `voice_call_outcome` reads the finished call back so the planner can write it to
+the CRM.
+
+A call breaks the shape every other agent has. Agents are one-shot and synchronous, while
+a conversation lasts minutes and talks back — so the call is not modelled as a function
+call at all:
+
+```
+step 5  voice_outreach        dials, returns in ~1s with a call_id and no outcome
+        ...                   the graph exits; the orchestration parks in `running`
+        ~~~ the call happens, minutes, on the vendor's side ~~~
+        POST /voice/tool-call the agent books a meeting mid-sentence (no planner)
+        POST /voice/webhook   the call ended -> resume the SAME orchestration
+step 6  voice_call_outcome    reads the call back, bills the minutes
+step 7  crm_sync              writes the disposition against the account
+```
+
+One orchestration record, start to finish: same id, same flow, step numbers carrying on.
+Blocking the tool for the call's duration was the alternative and is worse — nothing sets
+a timeout on an agent call, so the hop dies mid-call and the orchestrator re-plans while
+the line is still open, dialing a second time.
+
+Three things are load-bearing and easy to mistake for incidental:
+
+- **The reconciler.** Vendors are documented to skip the end-of-call webhook on
+  transferred calls, and deliveries get dropped. A sweep over unclaimed `voice_calls`
+  rows (`call_policy.reconcile_after_minutes`) is what makes the outcome *always* reach
+  the planner. A call the vendor cannot account for is finalized `unknown` and resumed
+  anyway — "we could not reach them" is worth recording.
+- **The claim gate.** `claim_voice_followup` is a conditional UPDATE, so the webhook and
+  the reconciler race freely and exactly one resumes. Without it a vendor retry runs every
+  post-call step twice.
+- **In-call tools are not agents.** Calendar, SMS and email live in
+  `departments/sales/live_tools.py` and import nothing from `core`. The vendor's tool
+  webhook blocks the conversation with a timeout of a few seconds, which a planner call
+  alone exceeds.
+
+Telephony cost is **recorded, never enforced**: a resumed run carries no budget ceiling,
+because the money was spent before any ceiling could have stopped it, and halting there
+would mean never recording the call. Steps stay bounded.
+
+Nothing dials unless `VOICE_ENABLED=1`. Off, `voice_outreach` returns a synthetic
+`dry-...` call id with `dry_run=true` and constructs no transport — so `pytest` and
+`scripts/seed.py` place no calls. To watch the whole seam with a real planner and no
+vendor account:
+
+```bash
+python scripts/voice_replay.py --list              # runs parked awaiting a call
+python scripts/voice_replay.py <orchestration_id>  # fake the end-of-call report
+```
+
+Call policy — length, hours, the consent script, when to escalate — is `call_policy` in
+`config/playbook.yaml`, rendered into the call's prompt rather than written into the
+agent. It is top-level, not per-flow, because it renders in the sales process where the
+current flow is unknowable.
+
 ## Guardrails
 
 Every run is bounded. The table is in `core/orchestrator.py`:
@@ -181,6 +243,9 @@ Every run is bounded. The table is in `core/orchestrator.py`:
 | payload fails the agent's schema | fed back to the planner as an observation |
 | tool error | retry, then re-plan, then halt |
 | no suitable agent | `no_agent` |
+
+A run resumed after a voice call is the one exception to the budget row: it carries no
+ceiling, deliberately. See [Voice calls](#voice-calls).
 
 Schema failures are fed back rather than raised on purpose: the planner's action space is
 every registered agent, so it *will* sometimes pick one the blackboard cannot satisfy.
@@ -195,3 +260,9 @@ pytest
 Covers the cost rollups, the budget halt, loop detection, the step ceiling, invalid-payload
 re-planning, and the decision trail. `core.llm.llm_call` is monkeypatched — no network, no
 API key.
+
+The voice tests need no telephony account either, on the same principle: `VOICE_ENABLED`
+is off, and `VoiceClient` takes an injectable `transport` so the real URLs and headers are
+still asserted against an `httpx.MockTransport`. The ones worth knowing about are the
+redelivered webhook (resumes exactly once) and the call the vendor lost (still reaches the
+planner, as an `unknown` outcome rather than an error).

@@ -118,7 +118,16 @@
       "Bash(./.venv/Scripts/python.exe -m pytest tests/test_crm_agents.py tests/test_vendor_clients.py -q)",
       "Bash(./.venv/Scripts/python.exe -m pytest -q)",
       "Bash(./.venv/Scripts/python.exe scripts/hubspot_setup.py --help)",
-      "Bash(./.venv/Scripts/python.exe -c ' *)"
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/test_voice_agents.py -q)",
+      "Bash(grep -n \"x_voice_signature\\\\|Header\\(\" api/voice.py | head; echo \"=== verify_signature ===\"; sed -n '/^def verify_signature/,/^class VoiceClient/p' departments/sales/clients.py | head -25)",
+      "WebFetch(domain:docs.vapi.ai)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/test_voice_webhook.py tests/test_voice_agents.py -q)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/test_voice_webhook.py -q)",
+      "Bash(curl -s -m 15 http://127.0.0.1:8000/departments)",
+      "Bash(./.venv/Scripts/python.exe scripts/voice_replay.py 4dc7820a-d633-462a-b453-a4e72704f5b9 --duration 123 --cost 0.1336)",
+      "Bash(./.venv/Scripts/python.exe scripts/hubspot_setup.py --check)",
+      "Bash(./.venv/Scripts/python.exe scripts/hubspot_setup.py)"
     ]
   }
 }

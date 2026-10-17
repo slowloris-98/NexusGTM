@@ -82,6 +82,35 @@ boundary. A flow needing different bands declares a *new* top-level key
 run in opposite directions: 70 in `thresholds` earns a rep because the lead is good, 70 in
 `churn_risk_bands` earns one because the account is in trouble.
 
+**`identity:` is the tenant, not the platform.** NexusGTM is what runs; `identity.company` is
+the company whose reps the agents act on behalf of, and the name a prospect actually hears.
+`icp:` is *that* company's ICP. Both sales prompts render it through
+`departments.sales.voice.render_identity()` — a single source, because the gap it fills was a
+live call that opened "calling on behalf of Jordan Alvarez at Company Name": the model was told
+to name a company it had never been given. Switching tenant is an edit to that one block.
+
+A **voice call does not fit the one-shot contract**, so it is split across two
+agents and a resume. `voice_outreach` dials and returns in about a second, carrying a
+`call_id` and no outcome; the graph then exits with the orchestration parked in
+`running`. When the call ends, `api/voice.py` resumes the *same* orchestration
+(`Orchestrator.resume`) and the planner picks `voice_call_outcome` then `crm_sync` as
+further steps — same id, same flow, `step_no` carrying on. Blocking the tool for the
+call's duration was the alternative and is worse: `registry.call_agent` sets no timeout,
+so the hop dies mid-call and the orchestrator re-plans while the line is still open,
+dialing twice.
+
+`api/voice.py`'s **reconciler is not optional**. Vendors are documented to skip the
+end-of-call webhook on transferred calls, and deliveries get dropped — so a sweep over
+unclaimed `voice_calls` rows is what makes "the outcome always reaches the planner" true
+rather than likely. A call the vendor cannot account for is finalized `unknown` and
+resumed anyway, because "we could not reach them" is a result worth writing to the CRM.
+`claim_voice_followup` is a conditional UPDATE, which is what lets the webhook and the
+reconciler race without ever resuming twice.
+
+In-call tools (calendar, SMS, email) live in `departments/sales/live_tools.py` and are
+**not agents**. The vendor's tool webhook blocks the conversation with a timeout of a few
+seconds, which a planner call alone exceeds. Nothing there may import `core`.
+
 Four agents are stubs with no integration behind them — `run_ad_campaigns`,
 `churn_detection`, `engagement_tracking`, `send_outreach`. Each stamps its own provenance in
 Python (`source: "simulated"`, `source: "inferred"`, `dry_run: True`) rather than asking the
@@ -97,6 +126,16 @@ ceilings come from `State`, not `self`, resolved once per run: **flow override >
 attribute > the playbook's global `guardrails:` block**. A mid-run flow switch does not
 re-resolve them, or a planner could buy itself headroom by changing a label.
 
+**Telephony spend is recorded, never enforced.** A resumed run carries
+`budget_usd = inf`, deliberately: the cost arrives after the conversation already
+happened, so a ceiling cannot prevent it, and halting on it would mean never recording
+the call that incurred it. Steps stay bounded — `max_steps` is granted relative to where
+the run parked, not from zero, or a run parked at step 5 of 12 would halt before writing
+anything back. Two consequences follow and are accepted: a re-opened orchestration's
+stored total no longer equals what the guardrail saw mid-run, and `resume` writes
+`cost_events` under the original `orchestration_id` so the single row's total stays
+additive (no parent/child rollup exists, and none is needed).
+
 SQLite, WAL mandatory (orchestrator writes while API reads). One connection per request via
 `Depends`, since FastAPI runs sync endpoints in a threadpool and connections cannot cross
 threads. All SQL lives in `store/queries.py`. `decisions` logs the planner's rationale per
@@ -105,7 +144,9 @@ step, required because the path varies per run.
 `CREATE TABLE IF NOT EXISTS` cannot add a column to a table that already exists, and a live
 `nexusgtm.db` is checked in — so new columns go in `schema.sql` *and* in `db._ADDED_COLUMNS`,
 which `init_db` applies idempotently. Every entry there must stay nullable: adding a nullable
-column is the one schema change SQLite makes without rebuilding the table.
+column is the one schema change SQLite makes without rebuilding the table. Whole new *tables* need no
+entry — `init_db` runs the entire `schema.sql` every start, which is why `voice_calls` is a
+table rather than columns bolted onto `runs`.
 
 Strict structured output cannot express a free-form object, so the planner's `input_payload`
 travels as a JSON string and is parsed in `planner.decide()`.
