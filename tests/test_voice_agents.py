@@ -438,6 +438,216 @@ def test_transcript_list_is_flattened():
     assert record["transcript"] == "assistant: hello\nuser: hi"
 
 
+# ----------------------------------------------------- a call still in flight
+
+
+def test_a_queued_call_is_in_progress_not_failed():
+    """The exact payload Vapi returned two seconds after a call was placed.
+
+    A call still ringing has no duration and no end reason -- the same shape as
+    one that failed. Reading it as `failed` is what put "the call did not
+    connect" into the CRM about a call that went on to last forty seconds.
+    """
+    record = normalize_call({"id": "c1", "status": "queued"})
+    assert record["status"] == "in_progress"
+    assert record["duration_seconds"] is None
+    assert record["cost_usd"] == 0.0
+
+
+@pytest.mark.parametrize("status", ["ringing", "in-progress", "forwarding"])
+def test_the_other_in_flight_statuses(status):
+    assert normalize_call({"id": "c1", "status": status})["status"] == "in_progress"
+
+
+def test_a_vendor_status_does_not_override_a_real_end_reason():
+    """The early return must not swallow a call that has genuinely ended.
+
+    Vapi leaves `status` set on a finished call, so keying only on it would make
+    every completed call look in-flight.
+    """
+    record = normalize_call(
+        {
+            "id": "c1",
+            "status": "in-progress",
+            "endedReason": "customer-ended-call",
+            "durationSeconds": 120,
+        }
+    )
+    assert record["status"] == "completed"
+    assert record["duration_seconds"] == 120
+
+
+def test_outcome_refuses_a_call_still_in_progress(parsed):
+    """voice_call_outcome gets the precondition every other agent already has.
+
+    An error here is a planner observation, not a crash: the run finishes and the
+    webhook resumes it once the call actually ends.
+    """
+    calls = parsed(OUTCOME)
+    envelope = VoiceCallOutcomeAgent().run(
+        {"voice_call": {"call_id": "call-live"}, "call_record": {"status": "in_progress"}}
+    )
+    assert envelope["status"] == "error"
+    assert "call-live" in envelope["output"]["error"]
+    assert "still in progress" in envelope["output"]["error"]
+    # It must not have paid a model to summarise a call that has not happened.
+    assert calls == []
+
+
+# ------------------------------------------------- voicemail is not a success
+
+
+def test_a_voicemail_is_not_a_completed_call():
+    """`silence-timed-out` carries a real duration and cost, so the fallback read
+    it as `completed` -- a voicemail landing in the CRM as a conversation.
+
+    The verified payload from call 01a142a7: the agent spoke its opening line to
+    a recording, nobody answered, and the vendor gave up after forty seconds.
+    """
+    record = normalize_call(
+        {
+            "id": "01a142a7",
+            "endedReason": "silence-timed-out",
+            "startedAt": "2026-10-16T03:00:43.923Z",
+            "endedAt": "2026-10-16T03:01:24.400Z",
+            "cost": 0.0366,
+        }
+    )
+    assert record["status"] == "no_answer"
+    # Still billed and still timed -- it happened, it just reached nobody.
+    assert record["duration_seconds"] == 40
+    assert record["cost_usd"] == pytest.approx(0.0366)
+
+
+def test_a_call_that_never_dialled_is_failed():
+    record = normalize_call(
+        {"id": "c1", "endedReason": "call.start.error-get-phone-number"}
+    )
+    assert record["status"] == "failed"
+
+
+def test_identity_company_is_named_in_the_briefing_instruction(parsed):
+    """The literal name, in the instruction itself.
+
+    Naming it only in the identity block above left the model free to write "at
+    our team" -- neither a placeholder nor the company's name, so the earlier
+    no-brackets rule did not catch it.
+    """
+    calls = parsed(BRIEF)
+    VoiceOutreachAgent().run(
+        {"lead": LEAD, "firmographics": FIRMO, "assigned_rep": "Alex Chen"}
+    )
+    instruction = calls[0]["instructions"]
+    company = playbook()["identity"]["company"]
+    assert f"say they are from {company}" in instruction
+    assert "our team" in instruction  # named as the thing to avoid
+
+# ------------------------------------------- the run id the webhook resumes on
+
+
+def test_orchestration_id_reaches_the_call_metadata(parsed, monkeypatch):
+    """The end of a chain that was silently broken.
+
+    register() took orchestration_id and dropped it, so every agent was blind to
+    its own run. A call placed without it in the metadata completes, posts its
+    end-of-call report, and resumes nothing -- which is exactly what happened on
+    the third live call.
+    """
+    parsed(BRIEF)
+    monkeypatch.setenv("VOICE_ENABLED", "true")
+    monkeypatch.setenv("VOICE_API_KEY", "vk-test")
+    monkeypatch.setenv("VOICE_AGENT_ID", "agent-1")
+
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(201, json={"id": "call-abc", "status": "queued"})
+
+    monkeypatch.setattr(
+        voice_module,
+        "VoiceClient",
+        lambda: VoiceClient(transport=httpx.MockTransport(handler)),
+    )
+
+    VoiceOutreachAgent().run(
+        {
+            "lead": LEAD,
+            "firmographics": FIRMO,
+            "assigned_rep": "Alex Chen",
+            "crm_reference_id": "Vercel",
+        },
+        orchestration_id="orch-1",
+    )
+
+    metadata = json.loads(seen[0].content)["assistantOverrides"]["metadata"]
+    assert metadata["orchestration_id"] == "orch-1"
+    assert metadata["crm_reference_id"] == "Vercel"
+    assert metadata["assigned_rep"] == "Alex Chen"
+
+
+def test_run_without_an_orchestration_id_still_works(parsed):
+    """The optional-parameter guarantee.
+
+    Twenty-seven call sites in this suite invoke Agent().run(payload) directly,
+    and thirteen agents never need the id at all. Making it required would have
+    rewritten all of them for no benefit.
+    """
+    parsed(BRIEF)
+    envelope = VoiceOutreachAgent().run(
+        {"lead": LEAD, "firmographics": FIRMO, "assigned_rep": "Alex Chen"}
+    )
+    assert envelope["status"] == "ok"
+
+
+def test_the_spender_carries_the_run_id():
+    """Any agent can now correlate itself with its run, not just this one."""
+    from core.agent import Spender
+
+    assert Spender("sales", "x").orchestration_id is None
+    assert Spender("sales", "x", "orch-9").orchestration_id == "orch-9"
+
+
+def test_register_forwards_the_orchestration_id(monkeypatch):
+    """The wiring itself, not just the agent's end of it.
+
+    Calling Agent().run(..., orchestration_id=...) directly proves the agent uses
+    the id, but skips the part that was broken: register()'s wrapper took the id
+    and called agent.run(payload) without it. This exercises the tool function
+    that FastMCP actually invokes.
+    """
+    import asyncio
+
+    from core.agent import Agent, register
+
+    captured: dict = {}
+
+    class Probe(Agent):
+        department = "sales"
+        name = "probe"
+        description = "d"
+        input_schema: dict = {"type": "object", "properties": {}}
+        output_schema: dict = {}
+
+        def execute(self, payload, llm):
+            captured["id"] = llm.orchestration_id
+            return {}
+
+    tools: dict = {}
+
+    class FakeMCP:
+        def tool(self, **kwargs):
+            def decorate(fn):
+                tools[kwargs["name"]] = fn
+                return fn
+
+            return decorate
+
+    register(FakeMCP(), Probe())
+    asyncio.run(tools["probe"]("orch-live", {}))
+
+    assert captured["id"] == "orch-live"
+
 # --------------------------------------------------------------- the sales module
 
 

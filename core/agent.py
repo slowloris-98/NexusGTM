@@ -23,10 +23,19 @@ class Spender:
     keeps agents stateless and safe under concurrent tool calls.
     """
 
-    def __init__(self, department: str, agent: str):
+    def __init__(
+        self, department: str, agent: str, orchestration_id: str | None = None
+    ):
         self.department = department
         self.agent = agent
         self.events: list[dict] = []
+        # The run this invocation belongs to. Carried here rather than on the
+        # agent for the same reason the events are: the Spender is per-call, so
+        # it stays correct under concurrent tool calls while the agent stays
+        # stateless. An agent that needs to correlate itself with its own run --
+        # voice_outreach hands it to the telephony vendor so the end-of-call
+        # webhook knows what to resume -- reads it as `llm.orchestration_id`.
+        self.orchestration_id = orchestration_id
 
     def __call__(self, prompt: str, **kwargs: Any) -> LLMResult:
         # Module-qualified so tests can patch core.llm.llm_call in one place.
@@ -60,13 +69,18 @@ class Agent(ABC):
     def execute(self, payload: dict, llm: Spender) -> dict:
         """Do the work. Raise to signal failure; `run` converts it to a status."""
 
-    def run(self, payload: dict) -> dict:
+    def run(self, payload: dict, orchestration_id: str | None = None) -> dict:
         """The contract: {output, status, cost_events[]}.
 
         Cost events are returned rather than written, because agents run in a
         separate process from the orchestrator that owns the store.
+
+        `orchestration_id` is optional because almost no agent needs it -- it
+        reaches `execute()` through the Spender rather than the signature, so the
+        thirteen agents that do not care are untouched and every direct
+        `Agent().run(payload)` keeps working.
         """
-        spender = Spender(self.department, self.name)
+        spender = Spender(self.department, self.name, orchestration_id)
         try:
             output: Any = self.execute(payload, spender)
             status = "ok"
@@ -106,7 +120,11 @@ def register(mcp, agent: Agent) -> None:
 
     async def tool(orchestration_id: str, payload: dict) -> dict:
         with _correlate(orchestration_id, agent.name):
-            return agent.run(payload)
+            # Forwarded, not dropped. This wrapper used to take the id purely to
+            # tag the trace, which left every agent blind to the run it belonged
+            # to -- and a voice call placed with no run id in its metadata had
+            # nothing for the end-of-call webhook to resume.
+            return agent.run(payload, orchestration_id)
 
     tool.__name__ = agent.name
     tool.__doc__ = agent.description
