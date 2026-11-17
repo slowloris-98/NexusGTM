@@ -129,7 +129,8 @@
       "Bash(./.venv/Scripts/python.exe scripts/hubspot_setup.py --check)",
       "Bash(./.venv/Scripts/python.exe scripts/hubspot_setup.py)",
       "Bash(sed -E 's/\\(API_KEY|SECRET\\)=.*/\\\\1=<redacted>/')",
-      "Bash(python -I -c ' *)"
+      "Bash(python -I -c ' *)",
+      "WebFetch(domain:www.langchain.com)"
     ]
   }
 }
