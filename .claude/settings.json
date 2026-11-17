@@ -127,7 +127,10 @@
       "Bash(curl -s -m 15 http://127.0.0.1:8000/departments)",
       "Bash(./.venv/Scripts/python.exe scripts/voice_replay.py 4dc7820a-d633-462a-b453-a4e72704f5b9 --duration 123 --cost 0.1336)",
       "Bash(./.venv/Scripts/python.exe scripts/hubspot_setup.py --check)",
-      "Bash(./.venv/Scripts/python.exe scripts/hubspot_setup.py)"
+      "Bash(./.venv/Scripts/python.exe scripts/hubspot_setup.py)",
+      "Bash(sed -E 's/\\(API_KEY|SECRET\\)=.*/\\\\1=<redacted>/')",
+      "Bash(python -I -c ' *)",
+      "WebFetch(domain:www.langchain.com)"
     ]
   }
 }

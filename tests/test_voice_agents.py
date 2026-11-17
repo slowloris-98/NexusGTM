@@ -703,3 +703,113 @@ def test_live_tools_never_reach_the_planner():
             name == forbidden or name.startswith(f"{forbidden}.")
             for name in imported
         ), f"live tools imported {forbidden}"
+
+
+# ------------------------------------------------------------- LangSmith tracing
+
+
+@pytest.fixture
+def traced(monkeypatch):
+    """Tracing on, with the run emitter replaced by a recorder."""
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    runs: list[dict] = []
+    monkeypatch.setattr(
+        voice_module,
+        "_trace_call",
+        lambda name, inputs, outputs: runs.append(
+            {"name": name, "inputs": inputs, "outputs": outputs}
+        ),
+    )
+    return runs
+
+
+def _enable_calls(monkeypatch):
+    monkeypatch.setenv("VOICE_ENABLED", "true")
+    monkeypatch.setenv("VOICE_API_KEY", "vk-test")
+    monkeypatch.setenv("VOICE_AGENT_ID", "agent-1")
+    monkeypatch.setattr(
+        voice_module,
+        "VoiceClient",
+        lambda: VoiceClient(
+            transport=httpx.MockTransport(
+                lambda r: httpx.Response(201, json={"id": "call-abc", "status": "queued"})
+            )
+        ),
+    )
+
+
+def test_a_placed_call_is_traced_with_the_phone_masked(parsed, traced, monkeypatch):
+    parsed(BRIEF)
+    _enable_calls(monkeypatch)
+
+    envelope = VoiceOutreachAgent().run(
+        {"lead": LEAD, "firmographics": FIRMO, "assigned_rep": "Alex Chen"}, "orch-1"
+    )
+
+    assert envelope["status"] == "ok"
+    assert [r["name"] for r in traced] == ["voice_call.placed"]
+    run = traced[0]
+    assert run["inputs"]["recipient"] == "***0000"
+    assert LEAD["phone"] not in json.dumps(run["inputs"])
+    assert run["inputs"]["metadata"]["orchestration_id"] == "orch-1"
+    assert run["outputs"]["call_id"] == "call-abc"
+
+
+def test_a_dry_run_traces_no_call(parsed, traced):
+    parsed(BRIEF)
+    VoiceOutreachAgent().run(
+        {"lead": LEAD, "firmographics": FIRMO, "assigned_rep": "Alex Chen"}
+    )
+    assert traced == []
+
+
+def test_the_call_record_is_traced_untruncated(parsed, traced):
+    """The outcome prompt cuts the transcript at 12k chars; the trace must not."""
+    parsed(OUTCOME)
+    transcript = "user: " + "x" * 20000
+    envelope = VoiceCallOutcomeAgent().run(
+        {
+            "voice_call": {"call_id": "call-abc"},
+            "call_record": {
+                "status": "completed",
+                "ended_reason": "customer-ended-call",
+                "duration_seconds": 240,
+                "cost_usd": 0.31,
+                "transcript": transcript,
+            },
+        }
+    )
+
+    assert envelope["status"] == "ok"
+    assert [r["name"] for r in traced] == ["voice_call.record"]
+    assert traced[0]["inputs"] == {"call_id": "call-abc"}
+    assert traced[0]["outputs"]["transcript"] == transcript
+    assert traced[0]["outputs"]["duration_seconds"] == 240
+
+
+def test_no_record_and_in_progress_trace_nothing(parsed, traced):
+    parsed()
+    VoiceCallOutcomeAgent().run({"voice_call": {"call_id": "call-gone"}})
+    VoiceCallOutcomeAgent().run(
+        {"voice_call": {"call_id": "call-abc"}, "call_record": {"status": "in_progress"}}
+    )
+    assert traced == []
+
+
+def test_a_tracing_failure_never_breaks_the_call(parsed, monkeypatch):
+    import langsmith.run_helpers
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("langsmith down")
+
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setattr(langsmith.run_helpers, "trace", boom)
+    parsed(OUTCOME)
+
+    envelope = VoiceCallOutcomeAgent().run(
+        {
+            "voice_call": {"call_id": "call-abc"},
+            "call_record": {"status": "completed", "duration_seconds": 60, "cost_usd": 0.1},
+        }
+    )
+    assert envelope["status"] == "ok"

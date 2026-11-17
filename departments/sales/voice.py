@@ -39,6 +39,31 @@ from departments.sales.clients import (
     calls_enabled,
 )
 
+
+def _mask_phone(phone: str) -> str:
+    """Last four digits only: a trace is a debug surface, not a contact list."""
+    return f"***{phone[-4:]}" if len(phone) > 4 else "***"
+
+
+def _trace_call(name: str, inputs: dict, outputs: dict) -> None:
+    """Log one vendor interaction as its own LangSmith run. Never breaks the call path.
+
+    The phone call itself goes through no LLM this process makes, so `wrap_openai`
+    never sees it. Emitted post-hoc -- opened and closed after the vendor step
+    succeeded -- rather than wrapping the vendor call, so a tracing failure can
+    never swallow or replace a VendorError. Runs inside `core.agent._correlate`,
+    which is what tags it with the orchestration_id.
+    """
+    if os.getenv("LANGSMITH_TRACING", "").lower() != "true":
+        return
+    try:
+        from langsmith.run_helpers import trace
+
+        with trace(name, run_type="tool", inputs=inputs) as run:
+            run.end(outputs=outputs)
+    except Exception:  # tracing must never break the call path
+        pass
+
 # Policy renderers. Missing keys raise rather than falling back to a literal: a
 # default here would be the duplicated constant the playbook exists to remove,
 # and `Agent.run` turns the raise into status="error", which is the right answer
@@ -291,6 +316,20 @@ class VoiceOutreachAgent(Agent):
             model_name=os.getenv("VOICE_MODEL", "").strip() or None,
         )
 
+        _trace_call(
+            "voice_call.placed",
+            inputs={
+                "recipient": _mask_phone(phone),
+                "agent_id": agent_id,
+                "first_message": composed.get("first_message", ""),
+                "system_prompt": system_prompt,
+                "model_provider": os.getenv("VOICE_MODEL_PROVIDER", "").strip() or None,
+                "model_name": os.getenv("VOICE_MODEL", "").strip() or None,
+                "metadata": metadata,
+            },
+            outputs=placed,
+        )
+
         # No cost recorded here. The minutes are not known until the call ends,
         # and billing an estimate would put a number in the ledger that no
         # invoice will ever match. voice_call_outcome records the real one.
@@ -419,6 +458,11 @@ class VoiceCallOutcomeAgent(Agent):
                 f"call {call_id} is still in progress; its outcome is not knowable "
                 "yet. Finish this run -- it resumes on its own when the call ends."
             )
+
+        # The conversation ran on the vendor's model, so no LLM trace ever saw it.
+        # This puts the whole record -- untruncated transcript, end reason, minutes
+        # -- in LangSmith as its own run, beside the outcome read below.
+        _trace_call("voice_call.record", inputs={"call_id": call_id}, outputs=record)
 
         # Telephony spend, recorded exactly once, here. Gated on a non-zero
         # amount like Clay's credit billing: an unpriced vendor logs nothing
