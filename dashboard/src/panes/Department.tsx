@@ -143,6 +143,7 @@ function TriggerForm({
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [fault, setFault] = useState<string | null>(null);
@@ -166,6 +167,9 @@ function TriggerForm({
       // refuses without one, while send_outreach neither needs nor reads it. An
       // empty string would look like a number the planner could call.
       if (phone.trim()) body.lead.phone = phone.trim();
+      // Free context the planner reads off the blackboard (e.g. "asked for a call").
+      // A hint it weighs, never a rule: a disqualified lead still stops at scoring.
+      if (notes.trim()) body.lead.notes = notes.trim();
       if (company) body.crm_reference_id = company;
     } else if (kind === "brief") {
       body.brief = text.trim();
@@ -224,6 +228,13 @@ function TriggerForm({
             placeholder="Phone, E.164 (optional)"
             aria-label="Lead phone number"
             onChange={(e) => setPhone(e.target.value)}
+          />
+          <textarea
+            value={notes}
+            rows={2}
+            placeholder="Notes (optional) — e.g. asked for a call rather than email"
+            aria-label="Lead notes"
+            onChange={(e) => setNotes(e.target.value)}
           />
         </div>
       )}
